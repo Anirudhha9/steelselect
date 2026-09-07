@@ -85,8 +85,10 @@ export interface RecommendedGrade {
   final_score: number;
   strength_bar: number;
   corrosion_bar: number;
-  /** null => "data not available"; no toughness column exists in the dataset. */
+  /** null => "data not available"; no impact-toughness column exists in the dataset. */
   toughness_bar: number | null;
+  /** Brinell hardness bar (0-100), normalized across surviving grades. */
+  hardness_bar: number;
   temp_bar: number;
   why_this_grade: string;
   trade_offs: string[];
