@@ -74,7 +74,7 @@ export const OPTIONAL_SCORE_KEYS: OptionalScoreKey[] = ["weldability", "formabil
 export const SCORE_LABELS: Record<ScoreKey, string> = {
   strength: "Strength",
   corrosionResistance: "Corrosion Resistance",
-  impactToughness: "Impact Toughness",
+  impactToughness: "Brinell Hardness",
   temperatureSuitability: "Temperature Suitability",
   weldability: "Weldability",
   formability: "Formability",
@@ -154,7 +154,7 @@ function toGrade(g: RecommendedGrade): GradeRecommendation {
     scores: {
       strength: g.strength_bar,
       corrosionResistance: g.corrosion_bar,
-      impactToughness: g.toughness_bar,
+      impactToughness: g.hardness_bar,
       temperatureSuitability: g.temp_bar,
       weldability: g.parameter_scores.weldability ?? d.weldability_score,
       formability: g.parameter_scores.formability ?? d.formability_score,
