@@ -347,6 +347,7 @@ export function recommend(req: RecommendRequest): RecommendResponse {
         strength: Math.round(at("UTS", i) * 100),
         corrosion: Math.round(at("corrosion", i) * 100),
         temp: Math.round(at("temperature", i) * 100),
+        hardness: Math.round(at("hardness", i) * 100),
       },
     };
   });
