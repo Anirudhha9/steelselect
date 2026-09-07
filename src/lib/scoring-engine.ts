@@ -370,7 +370,8 @@ export function recommend(req: RecommendRequest): RecommendResponse {
     final_score: s.score,
     strength_bar: s.bars.strength,
     corrosion_bar: s.bars.corrosion,
-    toughness_bar: null, // data not available
+    toughness_bar: null, // impact-toughness data not available
+    hardness_bar: s.bars.hardness,
     temp_bar: s.bars.temp,
     why_this_grade: WHY_PLACEHOLDER,
     trade_offs: [...TRADE_OFFS_PLACEHOLDER],
