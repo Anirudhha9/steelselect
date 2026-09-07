@@ -85,8 +85,10 @@ export interface RecommendedGrade {
   final_score: number;
   strength_bar: number;
   corrosion_bar: number;
-  /** null => "data not available"; no toughness column exists in the dataset. */
+  /** null => "data not available"; no impact-toughness column exists in the dataset. */
   toughness_bar: number | null;
+  /** Brinell hardness bar (0-100), normalized across surviving grades. */
+  hardness_bar: number;
   temp_bar: number;
   why_this_grade: string;
   trade_offs: string[];
@@ -345,6 +347,7 @@ export function recommend(req: RecommendRequest): RecommendResponse {
         strength: Math.round(at("UTS", i) * 100),
         corrosion: Math.round(at("corrosion", i) * 100),
         temp: Math.round(at("temperature", i) * 100),
+        hardness: Math.round(at("hardness", i) * 100),
       },
     };
   });
@@ -367,7 +370,8 @@ export function recommend(req: RecommendRequest): RecommendResponse {
     final_score: s.score,
     strength_bar: s.bars.strength,
     corrosion_bar: s.bars.corrosion,
-    toughness_bar: null, // data not available
+    toughness_bar: null, // impact-toughness data not available
+    hardness_bar: s.bars.hardness,
     temp_bar: s.bars.temp,
     why_this_grade: WHY_PLACEHOLDER,
     trade_offs: [...TRADE_OFFS_PLACEHOLDER],
