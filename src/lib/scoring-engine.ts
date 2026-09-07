@@ -295,7 +295,7 @@ export function recommend(req: RecommendRequest): RecommendResponse {
 
   // 5. Renormalize weights over the active parameters.
   const scoringParams: ParamKey[] = baseline
-    ? (["UTS", "corrosion", "hardness", "weldability", "formability", "cost"] as ParamKey[])
+    ? (["UTS", "corrosion", "weldability", "formability", "cost"] as ParamKey[])
     : active;
 
   const rawWeights = new Map<ParamKey, number>();
