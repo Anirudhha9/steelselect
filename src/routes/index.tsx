@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Loader2 } from "lucide-react";
 
 import jslLogo from "@/assets/jsl-logo.png.asset.json";
+import { InfoDialog, type InfoDialogKind } from "@/components/steel/InfoDialogs";
 import { RequirementsForm } from "@/components/steel/RequirementsForm";
 import { ResultsView } from "@/components/steel/ResultsView";
 import { SelectionSidebar } from "@/components/steel/SelectionSidebar";
@@ -33,6 +34,7 @@ function Index() {
   const [requirements, setRequirements] = useState<UserRequirements>(emptyRequirements);
   const [result, setResult] = useState<RecommendationResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [infoDialog, setInfoDialog] = useState<InfoDialogKind>(null);
 
   const handleSubmit = async () => {
     setLoading(true);
@@ -121,18 +123,32 @@ function Index() {
             </p>
           </div>
           <nav className="flex gap-5 text-xs font-medium text-muted-foreground">
-            <a href="#" className="transition-colors hover:text-primary">
+            <button
+              type="button"
+              className="transition-colors hover:text-primary"
+              onClick={() => setInfoDialog("about")}
+            >
               About
-            </a>
-            <a href="#" className="transition-colors hover:text-primary">
+            </button>
+            <button
+              type="button"
+              className="transition-colors hover:text-primary"
+              onClick={() => setInfoDialog("methodology")}
+            >
               Methodology
-            </a>
-            <a href="#" className="transition-colors hover:text-primary">
+            </button>
+            <button
+              type="button"
+              className="transition-colors hover:text-primary"
+              onClick={() => setInfoDialog("contact")}
+            >
               Contact
-            </a>
+            </button>
           </nav>
         </div>
       </footer>
+
+      <InfoDialog kind={infoDialog} onOpenChange={(v) => !v && setInfoDialog(null)} />
     </div>
   );
 }

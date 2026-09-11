@@ -50,7 +50,6 @@ export const CORROSION_OPTIONS: { value: CorrosionResistance; label: string }[] 
   { value: "low", label: "Low" },
   { value: "medium", label: "Medium" },
   { value: "high", label: "High" },
-  { value: "very-high", label: "Very High" },
 ];
 
 export type CoreScoreKey =
