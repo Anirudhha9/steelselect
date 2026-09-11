@@ -164,6 +164,10 @@ export const GRADES: PreparedGrade[] = (rawGrades as RawGrade[]).map((g) => {
   };
 });
 
+const BHN_MIN = Math.min(...GRADES.map((g) => g.hardness));
+const BHN_MAX = Math.max(...GRADES.map((g) => g.hardness));
+const HARDNESS_RANGE = BHN_MAX - BHN_MIN;
+
 /* ------------------------------------------------------------------ *
  * Application weight profiles (must sum to 1.0)
  * ------------------------------------------------------------------ */
@@ -312,11 +316,12 @@ export function recommend(req: RecommendRequest): RecommendResponse {
     ["corrosion", normalizeSet(survivors.map((g) => g.pren))],
     [
       "hardness",
-      normalizeSet(
-        survivors.map((g) =>
-          req.hardness != null ? -Math.abs(g.hardness - req.hardness) : g.hardness,
-        ),
-      ),
+      req.hardness != null
+        ? survivors.map((g) => {
+            const diff = Math.abs(g.hardness - req.hardness);
+            return HARDNESS_RANGE > 0 ? clamp01(1 - diff / HARDNESS_RANGE) : 1;
+          })
+        : normalizeSet(survivors.map((g) => g.hardness)),
     ],
     [
       "temperature",

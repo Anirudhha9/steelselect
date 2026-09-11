@@ -21,6 +21,17 @@ interface Props {
 const fieldClass =
   "h-11 w-full rounded-lg border border-input bg-card px-3.5 text-sm text-foreground shadow-xs outline-none transition-all placeholder:text-muted-foreground/70 hover:border-primary/35 focus:border-primary focus:ring-4 focus:ring-primary/12";
 
+const INPUT_LIMITS = {
+  uts: { min: 100, max: 2000 },
+  hardness: { min: 100, max: 600 },
+  tempMin: { min: -100, max: 1000 },
+  tempMax: { min: -100, max: 1000 },
+} as const;
+
+function clampNumber(v: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, v));
+}
+
 function Section({
   index,
   title,
@@ -52,11 +63,13 @@ function Field({
   label,
   unit,
   required,
+  error,
   children,
 }: {
   label: string;
   unit?: string;
   required?: boolean;
+  error?: string | null;
   children: React.ReactNode;
 }) {
   return (
@@ -68,13 +81,15 @@ function Field({
           <span className="rounded-sm bg-primary-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
             Required
           </span>
-        ) : (
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            Optional
-          </span>
-        )}
+        ) : null}
       </span>
       {children}
+      {error ? (
+        <span className="mt-1 flex items-center gap-1 text-xs text-destructive">
+          <AlertCircle className="size-3" />
+          {error}
+        </span>
+      ) : null}
     </label>
   );
 }
@@ -95,11 +110,42 @@ const ADDITIONAL = [
 
 export function RequirementsForm({ value, onChange, onSubmit, loading }: Props) {
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string | null>>({});
 
   const set = <K extends keyof UserRequirements>(key: K, v: UserRequirements[K]) =>
     onChange({ ...value, [key]: v });
 
   const num = (raw: string) => (raw.trim() === "" ? null : Number(raw));
+
+  const setClamped = (
+    key: keyof UserRequirements,
+    raw: string,
+    min: number,
+    max: number,
+    errorKey: string,
+  ) => {
+    const trimmed = raw.trim();
+    if (trimmed === "") {
+      set(key, null);
+      setFieldErrors((prev) => ({ ...prev, [errorKey]: null }));
+      return;
+    }
+    const parsed = Number(trimmed);
+    if (Number.isNaN(parsed)) {
+      setFieldErrors((prev) => ({ ...prev, [errorKey]: "Enter a valid number" }));
+      return;
+    }
+    if (parsed < min || parsed > max) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        [errorKey]: `Value must be between ${min} and ${max}`,
+      }));
+      set(key, parsed);
+      return;
+    }
+    setFieldErrors((prev) => ({ ...prev, [errorKey]: null }));
+    set(key, parsed);
+  };
 
   const handleSubmit = () => {
     if (!value.application) {
@@ -137,17 +183,27 @@ export function RequirementsForm({ value, onChange, onSubmit, loading }: Props) 
       <Section
         index="02"
         title="Performance Requirements"
-        hint="All optional — fill in what you know."
+        hint="Fill in what you know."
       >
         <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Minimum UTS" unit="MPa">
+          <Field label="Minimum UTS" unit="MPa" error={fieldErrors.uts}>
             <input
               type="number"
               inputMode="decimal"
               placeholder="550"
+              min={INPUT_LIMITS.uts.min}
+              max={INPUT_LIMITS.uts.max}
               className={fieldClass}
               value={value.minimumUTS ?? ""}
-              onChange={(e) => set("minimumUTS", num(e.target.value))}
+              onChange={(e) =>
+                setClamped(
+                  "minimumUTS",
+                  e.target.value,
+                  INPUT_LIMITS.uts.min,
+                  INPUT_LIMITS.uts.max,
+                  "uts",
+                )
+              }
             />
           </Field>
 
@@ -168,34 +224,64 @@ export function RequirementsForm({ value, onChange, onSubmit, loading }: Props) 
             </select>
           </Field>
 
-          <Field label="Brinell hardness">
+          <Field label="Brinell Hardness" error={fieldErrors.hardness}>
             <input
               type="number"
               inputMode="decimal"
-              placeholder="27"
+              placeholder="200"
+              min={INPUT_LIMITS.hardness.min}
+              max={INPUT_LIMITS.hardness.max}
               className={fieldClass}
               value={value.impactToughness ?? ""}
-              onChange={(e) => set("impactToughness", num(e.target.value))}
+              onChange={(e) =>
+                setClamped(
+                  "impactToughness",
+                  e.target.value,
+                  INPUT_LIMITS.hardness.min,
+                  INPUT_LIMITS.hardness.max,
+                  "hardness",
+                )
+              }
             />
           </Field>
 
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Min. Temp." unit="°C">
+            <Field label="Min. Temp." unit="°C" error={fieldErrors.tempMin}>
               <input
                 type="number"
                 placeholder="-40"
+                min={INPUT_LIMITS.tempMin.min}
+                max={INPUT_LIMITS.tempMin.max}
                 className={fieldClass}
                 value={value.operatingTemperatureMin ?? ""}
-                onChange={(e) => set("operatingTemperatureMin", num(e.target.value))}
+                onChange={(e) =>
+                  setClamped(
+                    "operatingTemperatureMin",
+                    e.target.value,
+                    INPUT_LIMITS.tempMin.min,
+                    INPUT_LIMITS.tempMin.max,
+                    "tempMin",
+                  )
+                }
               />
             </Field>
-            <Field label="Max. Temp." unit="°C">
+            <Field label="Max. Temp." unit="°C" error={fieldErrors.tempMax}>
               <input
                 type="number"
                 placeholder="400"
+                min={INPUT_LIMITS.tempMax.min}
+                max={INPUT_LIMITS.tempMax.max}
                 className={fieldClass}
                 value={value.operatingTemperatureMax ?? ""}
-                onChange={(e) => set("operatingTemperatureMax", num(e.target.value))}
+                onChange={(e) =>
+                  setClamped(
+                    "operatingTemperatureMax",
+                    e.target.value,
+                    INPUT_LIMITS.tempMax.min,
+                    INPUT_LIMITS.tempMax.max,
+                    "tempMax",
+                  )
+                }
               />
             </Field>
           </div>
