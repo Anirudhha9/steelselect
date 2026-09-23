@@ -38,10 +38,20 @@ function Index() {
 
   const handleSubmit = async () => {
     setLoading(true);
-    const res = await getRecommendations(requirements);
-    setResult(res);
-    setLoading(false);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    try {
+      const res = await getRecommendations(requirements);
+      setResult(res);
+    } catch {
+      setResult({
+        recommendations: [],
+        consideredOptional: [],
+        error: "Something went wrong while generating recommendations. Please try again.",
+        serverError: true,
+      });
+    } finally {
+      setLoading(false);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   };
 
   const showResults = result !== null && !loading;
@@ -98,6 +108,7 @@ function Index() {
             requirements={requirements}
             result={result}
             onEdit={() => setResult(null)}
+            onRetry={handleSubmit}
           />
         ) : (
           <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
