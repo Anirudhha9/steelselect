@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Sparkles, User, Bot, ArrowRight } from "lucide-react";
+import { Send, Sparkles, User, Bot } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -231,27 +231,6 @@ export function AIMode() {
           </div>
         </div>
 
-        {/* Starter prompts */}
-        {messages.length === 0 ? (
-          <div className="rounded-2xl border border-border bg-card p-5 shadow-[var(--shadow-card)]">
-            <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-primary">
-              Try asking
-            </h3>
-            <div className="space-y-2">
-              {STARTER_PROMPTS.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => send(p)}
-                  className="group flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-secondary/40 px-4 py-3 text-left text-sm text-muted-foreground transition-all hover:border-primary/25 hover:bg-accent/30 hover:text-foreground"
-                >
-                  <span>{p}</span>
-                  <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
       </div>
 
       {/* Chat section */}
