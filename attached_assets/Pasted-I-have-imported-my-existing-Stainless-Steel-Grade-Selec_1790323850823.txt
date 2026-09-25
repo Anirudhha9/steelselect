@@ -1,0 +1,321 @@
+I have imported my existing Stainless Steel Grade Selector application, “SteelSelect”, into this Replit project.
+
+CURRENT STATE OF THE APPLICATION:
+
+This is an existing production application that was previously deployed on Vercel.
+
+The application already has two modes:
+
+1. Engineering Mode
+2. AI Mode
+
+Engineering Mode is the original, fully working material-selection system.
+
+Engineering Mode currently uses the existing steel-grade database and recommendation/scoring logic. It allows users to enter engineering requirements such as application, minimum UTS/strength, corrosion resistance, hardness, temperature and other material-selection parameters, and returns suitable stainless steel grades.
+
+AI Mode has already been designed and added to the frontend.
+
+AI Mode currently contains:
+- Application dropdown with multiple application categories
+- Environment dropdown
+- Cost Preference selection:
+  - Budget
+  - Balanced
+  - Premium
+- AI chatbot interface below these inputs
+- Mode switch between Engineering Mode and AI Mode
+- Engineering Mode is the default mode
+
+The AI Mode frontend is currently only a UI/frontend implementation. The actual AI/backend functionality has NOT yet been implemented.
+
+The goal now is to implement Phase 2 and Phase 3.
+
+==================================================
+CRITICAL PROTECTION RULES
+==================================================
+
+DO NOT redesign the application.
+
+DO NOT change the existing dashboard design.
+
+DO NOT change Engineering Mode.
+
+DO NOT change the existing Engineering Mode recommendation algorithm.
+
+DO NOT change the existing steel database structure or data unless absolutely necessary for integration.
+
+DO NOT change existing scoring formulas, weights, filters, or grade properties.
+
+DO NOT remove any existing functionality.
+
+DO NOT replace existing components unnecessarily.
+
+The existing Engineering Mode must continue to work exactly as it does now.
+
+The AI Mode should be developed as an additional layer on top of the existing application.
+
+Before making changes, inspect the complete project structure and understand:
+- frontend framework
+- backend/server structure, if already present
+- database files
+- recommendation functions
+- scoring functions
+- existing API routes
+- AI Mode components
+- environment-variable configuration
+
+Reuse existing functions and data wherever possible instead of creating duplicate systems.
+
+==================================================
+PHASE 2 — BACKEND FOUNDATION
+==================================================
+
+Create a secure backend API endpoint for AI Mode.
+
+Use the project's existing framework and architecture. Do not introduce a new framework unnecessarily.
+
+Create an endpoint similar to:
+
+/api/ai-recommend
+
+The endpoint should accept a request such as:
+
+{
+  "application": "Construction & Infrastructure",
+  "environment": "Marine / Coastal",
+  "costPreference": "Balanced",
+  "message": "I need stainless steel for an outdoor coastal railing.",
+  "conversationHistory": []
+}
+
+The backend should validate:
+- application
+- environment
+- costPreference
+- message
+
+Handle invalid or missing input gracefully.
+
+Return structured JSON.
+
+For the initial implementation, DO NOT connect Gemini or another external AI provider yet.
+
+Instead, return a development response confirming that the backend receives the requirements correctly.
+
+For example:
+
+{
+  "success": true,
+  "requirements": {
+    "application": "...",
+    "environment": "...",
+    "costPreference": "..."
+  },
+  "message": "AI backend is receiving the requirements correctly."
+}
+
+Connect the existing AI Mode chatbot to this backend endpoint.
+
+The flow should become:
+
+AI Mode UI
+↓
+User selects Application
+↓
+User selects Environment
+↓
+User selects Cost Preference
+↓
+User enters chatbot message
+↓
+Frontend sends request
+↓
+/api/ai-recommend
+↓
+Backend response
+↓
+Chatbot displays response
+
+Do not use fake hardcoded steel recommendations.
+
+Do not put any API keys in frontend code.
+
+Prepare the backend so a Gemini API can be connected later using a server-side environment variable.
+
+Use:
+
+GEMINI_API_KEY
+
+Do NOT use:
+
+NEXT_PUBLIC_GEMINI_API_KEY
+
+Do not require me to paste the API key into the source code.
+
+==================================================
+PHASE 3 — CONNECT AI MODE TO THE EXISTING STEEL DATABASE
+==================================================
+
+After Phase 2 is working, connect the AI Mode backend to the EXISTING steel database and recommendation logic.
+
+First inspect the existing database and determine:
+- where the steel-grade data is stored
+- the available grade fields
+- existing property fields
+- existing score fields
+- existing recommendation functions
+- existing application-specific weighting/scoring logic
+
+DO NOT create a second steel database.
+
+DO NOT duplicate grade data.
+
+Reuse the existing database and recommendation engine.
+
+The architecture should become:
+
+AI Mode
+↓
+Application + Environment + Cost + User Message
+↓
+Backend
+↓
+Requirement interpretation
+↓
+Existing recommendation/scoring engine
+↓
+Existing steel database
+↓
+Candidate grades
+↓
+AI explanation layer
+↓
+AI Mode chatbot
+
+Initially, because the Gemini API is not yet connected, implement the deterministic part of this pipeline first.
+
+Convert the AI Mode selections into structured recommendation requirements.
+
+For example:
+
+{
+  "application": "Construction & Infrastructure",
+  "environment": "Marine / Coastal",
+  "costPreference": "Balanced"
+}
+
+These requirements should be passed into the existing recommendation system wherever possible.
+
+DO NOT invent new scoring formulas if an appropriate existing scoring system already exists.
+
+If the existing Engineering Mode recommendation engine cannot directly accept these three AI Mode inputs, create a small adapter/translation layer rather than modifying the Engineering Mode algorithm.
+
+For example:
+
+AI Mode:
+
+Application = Construction
+Environment = Marine / Coastal
+Cost = Balanced
+
+↓
+
+Adapter:
+
+Corrosion requirement = High
+Cost weight = Balanced
+Application-specific weighting = existing Construction weighting
+
+↓
+
+Existing recommendation engine
+
+↓
+
+Top candidate grades
+
+The exact mapping should be based on the application's existing database and recommendation logic. Do not invent material properties.
+
+The backend should return structured recommendation data such as:
+
+{
+  "success": true,
+  "requirements": {
+    "application": "...",
+    "environment": "...",
+    "costPreference": "..."
+  },
+  "recommendations": [
+    {
+      "grade": "...",
+      "score": "...",
+      "reason": "..."
+    }
+  ]
+}
+
+Use the actual fields and scoring values available in the existing database.
+
+==================================================
+ERROR HANDLING
+==================================================
+
+Implement proper backend error handling.
+
+Handle:
+- missing inputs
+- invalid inputs
+- database loading errors
+- recommendation errors
+- empty recommendation results
+- unexpected server errors
+
+Never return a blank screen.
+
+If no suitable grade is found, return a structured no-result response that the frontend can display appropriately.
+
+Do not silently relax the user's requirements.
+
+==================================================
+TESTING
+==================================================
+
+After implementation, test:
+
+1. Engineering Mode still works exactly as before.
+
+2. Switching between Engineering Mode and AI Mode works.
+
+3. AI Mode selections are correctly sent to the backend.
+
+4. Chat messages are correctly sent to the backend.
+
+5. /api/ai-recommend returns a valid response.
+
+6. Existing steel database is successfully accessed.
+
+7. Existing recommendation logic can produce candidate grades from AI Mode requirements.
+
+8. No existing dashboard functionality is broken.
+
+9. No API key is exposed in frontend code.
+
+10. No duplicate steel database or duplicate recommendation engine has been created.
+
+==================================================
+IMPORTANT DEVELOPMENT APPROACH
+==================================================
+
+Do NOT try to implement everything at once.
+
+First inspect the existing codebase.
+
+Then implement Phase 2 and verify it.
+
+Then implement Phase 3 and verify it.
+
+After each phase, make sure the existing Engineering Mode remains unchanged.
+
+Do not proceed by replacing working code with a new architecture.
+
+The objective is to build AI Mode ON TOP OF the existing SteelSelect engineering system, not to rebuild the application.
