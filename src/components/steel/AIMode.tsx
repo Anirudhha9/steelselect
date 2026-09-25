@@ -123,22 +123,49 @@ export function AIMode({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, thinking]);
 
-  const send = (text: string) => {
+  const send = async (text: string) => {
     if (!text.trim()) return;
     const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: text };
-    onMessagesChange([...messages, userMsg]);
+    const updatedMessages = [...messages, userMsg];
+    onMessagesChange(updatedMessages);
     setInput("");
     setThinking(true);
 
-    setTimeout(() => {
+    try {
+      const resp = await fetch("/api/ai-recommend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          application: aiState.application,
+          environment: aiState.environment,
+          costPreference: aiState.costPreference,
+          message: text,
+          conversationHistory: messages.map((m) => ({ role: m.role, content: m.content })),
+        }),
+      });
+
+      const data = (await resp.json()) as {
+        success: boolean;
+        message: string;
+        geminiConfigured: boolean;
+      };
+
       const aiMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: "AI recommendation service is not connected yet. Your requirements have been received.",
+        content: data.message,
       };
-      onMessagesChange([...messages, userMsg, aiMsg]);
+      onMessagesChange([...updatedMessages, aiMsg]);
+    } catch {
+      const aiMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: "I couldn't reach the AI service. Please check your connection and try again.",
+      };
+      onMessagesChange([...updatedMessages, aiMsg]);
+    } finally {
       setThinking(false);
-    }, 1200);
+    }
   };
 
   return (
