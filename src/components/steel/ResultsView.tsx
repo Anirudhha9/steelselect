@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, AlertCircle, RotateCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -35,10 +35,12 @@ export function ResultsView({
   requirements,
   result,
   onEdit,
+  onRetry,
 }: {
   requirements: UserRequirements;
   result: RecommendationResult;
   onEdit: () => void;
+  onRetry?: () => void;
 }) {
   const [detail, setDetail] = useState<GradeRecommendation | null>(null);
   const summary = summarize(requirements);
@@ -88,14 +90,84 @@ export function ResultsView({
         </div>
       </section>
 
-      {result.error ? (
+      {result.serverError ? (
         <section className="rounded-2xl border border-destructive/30 bg-destructive/5 p-6">
-          <h2 className="font-display text-lg font-bold text-destructive">{result.error}</h2>
-          {result.failedOn?.length ? (
-            <p className="mt-2 text-sm text-muted-foreground">
-              Most restrictive criteria: {result.failedOn.join(", ")}. Try relaxing these values.
-            </p>
-          ) : null}
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 size-5 shrink-0 text-destructive" />
+            <div className="flex-1">
+              <h2 className="font-display text-lg font-bold text-destructive">
+                {result.error}
+              </h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                An unexpected error occurred while processing your requirements. Please try again.
+              </p>
+              {onRetry ? (
+                <Button variant="subtle" className="mt-4" onClick={onRetry}>
+                  <RotateCcw />
+                  Retry
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ) : result.error ? (
+        <section className="rounded-2xl border border-warning/30 bg-warning/5 p-6">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 size-5 shrink-0 text-warning" />
+            <div className="flex-1">
+              <h2 className="font-display text-lg font-bold text-foreground">
+                {result.error}
+              </h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                No grade currently satisfies all of your selected requirements.
+                Try adjusting one or more requirements to broaden the search.
+              </p>
+              {result.failedOn?.length ? (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Most restrictive criteria:{" "}
+                  <span className="font-medium text-foreground">
+                    {result.failedOn.join(", ")}
+                  </span>
+                  . Consider relaxing these values.
+                </p>
+              ) : null}
+
+              {result.closestGrades?.length ? (
+                <div className="mt-5">
+                  <h3 className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">
+                    Closest alternatives
+                  </h3>
+                  <p className="mb-3 text-sm text-muted-foreground">
+                    These grades matched the fewest requirements — shown as alternatives for reference.
+                  </p>
+                  <ul className="space-y-2">
+                    {result.closestGrades.map((g) => (
+                      <li
+                        key={g.name}
+                        className="flex items-start justify-between gap-4 rounded-lg border border-border bg-card px-4 py-3"
+                      >
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">{g.name}</p>
+                          <p className="text-xs text-muted-foreground">{g.type}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">Failed on</p>
+                          <p className="text-sm font-medium text-foreground">
+                            {g.failed.length > 0 ? g.failed.join(", ") : "—"}
+                          </p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              <Button variant="subtle" className="mt-4" onClick={onEdit}>
+                <ArrowLeft />
+                Edit Requirements
+              </Button>
+            </div>
+          </div>
         </section>
       ) : (
         <>

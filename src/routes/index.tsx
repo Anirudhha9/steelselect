@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Sliders, Sparkles } from "lucide-react";
 
-import jslLogo from "@/assets/jsl-logo.png.asset.json";
+import { AIMode, type AIState, type ChatMessage } from "@/components/steel/AIMode";
+import { InfoDialog, type InfoDialogKind } from "@/components/steel/InfoDialogs";
 import { RequirementsForm } from "@/components/steel/RequirementsForm";
 import { ResultsView } from "@/components/steel/ResultsView";
 import { SelectionSidebar } from "@/components/steel/SelectionSidebar";
@@ -12,6 +13,9 @@ import {
   type RecommendationResult,
   type UserRequirements,
 } from "@/lib/recommendations";
+import { cn } from "@/lib/utils";
+
+type Mode = "engineering" | "ai";
 
 const TITLE = "Stainless Steel Grade Selector";
 const DESCRIPTION =
@@ -30,16 +34,34 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
+  const [mode, setMode] = useState<Mode>("engineering");
   const [requirements, setRequirements] = useState<UserRequirements>(emptyRequirements);
   const [result, setResult] = useState<RecommendationResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [infoDialog, setInfoDialog] = useState<InfoDialogKind>(null);
+  const [aiState, setAIState] = useState<AIState>({
+    application: null,
+    environment: null,
+    costPreference: null,
+  });
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
   const handleSubmit = async () => {
     setLoading(true);
-    const res = await getRecommendations(requirements);
-    setResult(res);
-    setLoading(false);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    try {
+      const res = await getRecommendations(requirements);
+      setResult(res);
+    } catch {
+      setResult({
+        recommendations: [],
+        consideredOptional: [],
+        error: "Something went wrong while generating recommendations. Please try again.",
+        serverError: true,
+      });
+    } finally {
+      setLoading(false);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   };
 
   const showResults = result !== null && !loading;
@@ -50,7 +72,7 @@ function Index() {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3.5 sm:px-8">
           <div className="flex items-center gap-3">
             <img
-              src={jslLogo.url}
+              src="/JSL.NS_BIG-9d94c2bf.png"
               alt="Jindal Stainless"
               className="h-9 w-auto object-contain"
             />
@@ -63,14 +85,58 @@ function Index() {
               </span>
             </span>
           </div>
-          <span className="hidden rounded-full border border-primary/25 bg-primary-soft px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary sm:inline-block">
-            Engineering Tool
-          </span>
+
+          <div className="flex items-center gap-3">
+            <div className="flex rounded-full border border-border bg-card p-0.5 shadow-xs">
+              <button
+                type="button"
+                onClick={() => setMode("engineering")}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all sm:px-4",
+                  mode === "engineering"
+                    ? "bg-gradient-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Sliders className="size-3.5" />
+                <span className="hidden sm:inline">Engineering</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("ai")}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all sm:px-4",
+                  mode === "ai"
+                    ? "bg-gradient-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Sparkles className="size-3.5" />
+                <span className="hidden sm:inline">AI</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="mx-auto max-w-6xl border-t border-border/60 px-5 py-2 sm:px-8">
+          <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-medium tracking-wide text-muted-foreground">
+            <span>75+ grades</span>
+            <span className="hidden h-1 w-1 rounded-full bg-primary/60 sm:inline" />
+            <span className="hidden sm:inline">Multi-parameter scoring</span>
+            <span className="hidden h-1 w-1 rounded-full bg-primary/60 sm:inline" />
+            <span className="hidden sm:inline">Engineering-based recommendations</span>
+          </p>
         </div>
       </header>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-10 sm:px-8 sm:py-14">
-        {loading ? (
+        {mode === "ai" ? (
+          <AIMode
+            aiState={aiState}
+            onAIStateChange={setAIState}
+            messages={chatMessages}
+            onMessagesChange={setChatMessages}
+          />
+        ) : loading ? (
           <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 text-center">
             <span className="flex size-16 items-center justify-center rounded-2xl bg-primary-soft">
               <Loader2 className="size-8 animate-spin text-primary" />
@@ -87,28 +153,20 @@ function Index() {
             requirements={requirements}
             result={result}
             onEdit={() => setResult(null)}
+            onRetry={handleSubmit}
           />
         ) : (
-          <>
-            <section className="mb-10 overflow-hidden rounded-2xl border border-border bg-gradient-hero px-6 py-9 shadow-[var(--shadow-card)] sm:px-10 sm:py-12">
-              <span className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-card/70 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">
-                Material Selection
-              </span>
-              <h1 className="mt-4 max-w-2xl font-display text-3xl font-bold leading-[1.1] text-foreground sm:text-[2.6rem]">
-                {TITLE}
-              </h1>
-              <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-                {'\n'}
-              </p>
-              <div className="mt-6 h-px w-32 hairline-rule" />
-            </section>
-            <RequirementsForm
-              value={requirements}
-              onChange={setRequirements}
-              onSubmit={handleSubmit}
-              loading={loading}
-            />
-          </>
+          <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
+            <div>
+              <RequirementsForm
+                value={requirements}
+                onChange={setRequirements}
+                onSubmit={handleSubmit}
+                loading={loading}
+              />
+            </div>
+            <SelectionSidebar />
+          </div>
         )}
       </main>
 
@@ -121,18 +179,32 @@ function Index() {
             </p>
           </div>
           <nav className="flex gap-5 text-xs font-medium text-muted-foreground">
-            <a href="#" className="transition-colors hover:text-primary">
+            <button
+              type="button"
+              className="transition-colors hover:text-primary"
+              onClick={() => setInfoDialog("about")}
+            >
               About
-            </a>
-            <a href="#" className="transition-colors hover:text-primary">
+            </button>
+            <button
+              type="button"
+              className="transition-colors hover:text-primary"
+              onClick={() => setInfoDialog("methodology")}
+            >
               Methodology
-            </a>
-            <a href="#" className="transition-colors hover:text-primary">
+            </button>
+            <button
+              type="button"
+              className="transition-colors hover:text-primary"
+              onClick={() => setInfoDialog("contact")}
+            >
               Contact
-            </a>
+            </button>
           </nav>
         </div>
       </footer>
+
+      <InfoDialog kind={infoDialog} onOpenChange={(v) => !v && setInfoDialog(null)} />
     </div>
   );
 }

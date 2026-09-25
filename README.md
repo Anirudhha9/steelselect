@@ -1,354 +1,351 @@
-# Steel Selector Pro
+# steelselect
 
-Build a modern web app called “Stainless Steel Grade Selector” for recommending the best stainless steel grade based on user requirements.
+A smart, application-focused tool for selecting the most suitable stainless steel grade based on engineering requirements, material properties, corrosion conditions, and cost considerations.
 
-DESIGN / THEME
+## Overview
 
-Use a red + white theme with a modern + classic industrial/engineering look.
+Selecting the right stainless steel grade can be challenging because different applications require different combinations of strength, corrosion resistance, toughness, weldability, formability, operating temperature, and cost.
 
-The UI should feel:
+The **Stainless Steel Grade Selector** simplifies this process by allowing users to enter their application requirements and receive suitable stainless steel grade recommendations along with the key properties and trade-offs behind each recommendation.
 
-Professional and trustworthy
+The project is designed to help engineers, fabricators, students, procurement teams, and new stainless steel users make faster and more informed material-selection decisions.
 
-Clean and premium
+## Key Features
 
-Engineering-focused
+### Application-Based Grade Recommendation
+Users can specify their application and engineering requirements. The system evaluates available grades and recommends suitable options based on the selected criteria.
 
-Modern but not overly futuristic
+### Multi-Parameter Selection
+The recommendation engine considers multiple material characteristics, including:
 
-Use white backgrounds, deep red accents, dark charcoal text, light gray borders, subtle shadows and moderate rounded corners.
+- Corrosion resistance
+- Tensile strength
+- Hardness
+- Toughness
+- Weldability
+- Formability
+- Cost
+- PREN (Pitting Resistance Equivalent Number)
+- Chemical composition
 
-Make it fully responsive for desktop and mobile.
+### Intelligent Ranking
+Grades are ranked according to the importance of different properties for the selected application.
 
-INPUT PAGE
+For example, corrosion resistance and toughness can be given greater importance for demanding environments, while formability and cost can receive greater weight for fabrication-oriented applications.
 
-Header:
+### Trade-Off Explanation
+Instead of simply displaying a grade name, the application highlights why a grade was recommended and explains important trade-offs such as:
+
+> Higher corrosion resistance ↔ Higher material cost
 
-Stainless Steel Grade Selector
+This helps users understand the reasoning behind the recommendation.
 
-Subtitle:
-Find the right stainless steel grade for your application.
+### PREN-Based Corrosion Assessment
+The application uses PREN as an indicator of resistance to localized corrosion.
 
-Create a clean multi-section form.
+The calculation is based on:
 
-APPLICATION — REQUIRED
+**PREN = Cr + 3.3 × Mo + 16 × N**
 
-Dropdown:
+where:
 
-Construction
+- Cr = Chromium content
+- Mo = Molybdenum content
+- N = Nitrogen content
 
-Consumer Products
+Grades are additionally categorized using PREN-based corrosion-resistance levels.
 
-Shipbuilding
+### Application-Specific Weighting
+Different applications require different material priorities.
 
-Railways
+The recommendation system can assign different weights to properties depending on the application, allowing the same database to support use cases across industries such as:
 
-Other
+- Construction
+- Infrastructure
+- Machine components
+- Shipbuilding
+- Railways
+- Automotive and mobility
+- Process industries
+- Renewable energy
+- Architecture
+- Consumer products
 
-Show “Required” beside the field.
+### User-Friendly Interface
+The interface is designed for both technical and non-technical users, allowing users to explore stainless steel grades without requiring extensive knowledge of metallurgy.
 
-This is the only mandatory input.
+## How the Recommendation Works
 
-PERFORMANCE REQUIREMENTS — OPTIONAL
+The basic recommendation workflow is:
 
-Strength:
+```text
+User Requirements
+       ↓
+Application Identification
+       ↓
+Requirement & Property Weighting
+       ↓
+Database Filtering
+       ↓
+Grade Scoring
+       ↓
+Multi-Grade Ranking
+       ↓
+Recommended Grades
+       ↓
+Property Comparison + Trade-Off Explanation
+```
 
-Label: Minimum UTS
+Each grade is evaluated against the user's requirements and assigned scores across relevant properties.
 
-Numeric input
+A simplified recommendation score can be represented as:
+
+```text
+Overall Score =
+    Corrosion Score × Wc
+  + Strength Score × Ws
+  + Hardness Score × Wh
+  + Toughness Score × Wt
+  + Weldability Score × Ww
+  + Formability Score × Wf
+  + Cost Score × Wcost
+```
+
+Where the weights depend on the selected application and user requirements.
+
+## Database
+
+The application uses a structured stainless steel grade database containing information such as:
+
+- Grade designation
+- Common/alternate grade names
+- Stainless steel family
+- Chromium content
+- Nickel content
+- Molybdenum content
+- Nitrogen content
+- Carbon content
+- Tensile strength
+- Yield strength
+- Hardness
+- Toughness / Charpy impact energy
+- PREN
+- PREN index
+- Weldability score
+- Formability score
+- Cost score
+- Other relevant material properties
+
+The database can be expanded to include additional grades, standards, suppliers, regions, and application-specific properties.
+
+## AI-Assisted Mode
+
+The project can be extended with an AI-powered mode for users who are unfamiliar with technical material-selection terminology.
+
+Instead of requiring users to understand terms such as:
+
+- UTS
+- Yield Strength
+- Brinell Hardness
+- PREN
+- Toughness
+
+the AI interface can interpret natural-language requirements such as:
+
+> "I need a stainless steel for an outdoor structure near the sea. It should resist corrosion, be easy to weld, and not be too expensive."
+
+The AI converts the user's description into structured engineering requirements and passes them to the recommendation engine.
+
+This creates a two-layer architecture:
+
+```text
+Natural Language User Input
+          ↓
+      AI Layer
+          ↓
+Structured Requirements
+          ↓
+Recommendation Engine
+          ↓
+Steel Grade Database
+          ↓
+Ranked Recommendations
+```
+
+The AI should assist with interpreting user requirements, while the actual material recommendation should remain grounded in the application's structured grade-property database.
 
-Unit: MPa
+## Technology Stack
 
-Example placeholder: 550
+The application is built as a modern web application.
 
-Corrosion Resistance:
+Typical components include:
 
-Dropdown:
+- **Frontend:** React / modern web UI
+- **Styling:** CSS / Tailwind CSS
+- **Database:** Structured steel-grade dataset
+- **Recommendation Engine:** Rule-based / weighted scoring system
+- **AI Layer:** API-based LLM integration
+- **Deployment:** Vercel
+- **Version Control:** GitHub
 
-Low
+## Project Structure
 
-Medium
+A typical project structure is:
 
-High
+```text
+steel-grade-selector/
+│
+├── public/
+│   ├── logo/
+│   └── assets/
+│
+├── src/
+│   ├── components/
+│   ├── pages/
+│   ├── data/
+│   ├── utils/
+│   ├── services/
+│   └── App.*
+│
+├── database/
+│   └── stainless-steel-grades.*
+│
+├── README.md
+├── package.json
+└── ...
+```
 
-Very High
+The exact structure may vary depending on the frontend framework and deployment configuration.
 
-Impact Toughness:
+## Getting Started
 
-Numeric input
+### 1. Clone the repository
 
-Unit: J
+```bash
+git clone <YOUR_GITHUB_REPOSITORY_URL>
+cd <PROJECT_FOLDER>
+```
 
-Operating Temperature:
+### 2. Install dependencies
 
-Minimum Temperature
+```bash
+npm install
+```
 
-Maximum Temperature
+### 3. Start the development server
 
-Unit: °C
+```bash
+npm run dev
+```
 
-Allow negative values.
+The application should then be available at the local development URL shown in the terminal.
 
-All these fields are optional.
+### 4. Build for production
 
-ADDITIONAL PARAMETERS — OPTIONAL
+```bash
+npm run build
+```
 
-Ask:
+## Deployment
 
-Which additional factors should we consider?
+The application can be deployed using Vercel.
 
-Provide selectable checkboxes/cards:
+Typical deployment workflow:
 
-☐ Weldability
-☐ Formability
-☐ Cost
+```text
+GitHub Repository
+       ↓
+      Vercel
+       ↓
+Production Build
+       ↓
+Live Web Application
+```
 
-Add short descriptions:
+Every update pushed to the connected repository can be deployed automatically.
 
-Weldability — Ease and reliability of welding
+## Design Philosophy
 
-Formability — Suitability for forming and fabrication
+The application follows three key principles:
 
-Cost — Material cost/value
+**1. Engineering relevance**
 
-The user can select any combination, including none.
+Recommendations should be based on measurable material properties and application requirements rather than simply popularity.
 
-MAIN BUTTON
+**2. Explainability**
 
-Large red CTA:
+Users should understand why a particular grade was recommended and what compromises are involved.
 
-Find Recommended Grades →
+**3. Extensibility**
 
-When clicked:
+The system should allow new grades, properties, applications, standards, and recommendation logic to be added without rebuilding the entire application.
 
-Validate that Application is selected.
+## Future Scope
 
-If not, show: “Please select an application to continue.”
+The platform can be expanded with:
 
-If valid, show a short loading animation:
-Analyzing your requirements...
+### AI-Powered Natural Language Selection
+Allow users to describe their requirements in everyday language and automatically convert them into engineering parameters.
 
-Then show dummy recommendation results.
+### Live Cost Intelligence
+Incorporate regional and market-based stainless steel prices into the recommendation process.
 
-Do NOT implement the actual recommendation algorithm yet.
+### Inventory-Based Recommendations
+Consider available grades, thicknesses, and inventory when generating recommendations.
 
-RESULTS PAGE
+### Global Standards Mapping
+Map equivalent grades across standards such as:
 
-Title:
+- ASTM
+- EN
+- JIS
+- UNS
+- IS
 
-Recommended Stainless Steel Grades
+### Expanded Application Coverage
+Support additional industries and specialized applications.
 
-Subtitle:
-“Based on your selected requirements, these grades offer the best overall fit.”
+### Continuous Learning
+Use anonymized user feedback and historical selections to improve recommendation logic over time.
 
-Show a compact summary of the user's inputs.
+### Supplier Integration
+Connect recommendations with supplier availability, product forms, dimensions, and lead times.
 
-Only display fields that the user actually entered.
+## Important Note
 
-Add:
-Edit Requirements
+The recommendations provided by this application are intended to support material-selection decisions and should not replace engineering judgment, applicable standards, manufacturer specifications, testing, or professional consultation.
 
-This should return to the form while preserving the entered values.
+Material suitability can depend on factors such as:
 
-RECOMMENDATION CARDS
+- Actual operating environment
+- Temperature
+- Chloride concentration
+- Mechanical loading
+- Fabrication process
+- Welding procedure
+- Product form and thickness
+- Applicable standards
+- Surface finish
+- Heat treatment
+- Service life requirements
 
-Show 3 dummy grades, for example:
+Users should verify the final material selection against the relevant engineering specifications and standards.
 
-SS 304
+## Project Objective
 
-SS 316L
+The ultimate goal of the Stainless Steel Grade Selector is to make stainless steel selection:
 
-SS 410
+**Faster → More understandable → More data-driven → More application-specific**
 
-These are placeholder recommendations only.
+while reducing the risk of unnecessary over-specification or selecting a grade that is unsuitable for the intended service environment.
 
-Each card should show:
+## License
 
-Grade name
+Add the appropriate license and usage terms for your project before public distribution.
 
-Overall Score: 92 / 100
+---
 
-Individual scores:
-
-Strength
-
-Corrosion Resistance
-
-Impact Toughness
-
-Temperature Suitability
-
-If the user selected Weldability, Formability or Cost, show those scores too.
-
-For example, if the user selected only Weldability and Cost, show:
-
-Weldability
-
-Cost
-
-Do not show unselected additional parameters as if they were considered.
-
-Use attractive score bars/circular indicators.
-
-Highlight the highest-ranked grade with:
-
-BEST MATCH
-
-WHY THIS GRADE?
-
-Every recommendation should include a short explanation.
-
-Example:
-
-“Strong overall fit for construction applications with excellent corrosion resistance and good formability.”
-
-Also show:
-
-Key Trade-offs
-
-✓ Excellent corrosion resistance
-✓ Good formability
-⚠ Higher cost than SS 410
-
-The trade-offs should explain why a grade may be better in one area but weaker in another.
-
-COMPARISON TABLE
-
-Add a comparison section below the cards.
-
-Columns:
-Parameter | SS 304 | SS 316L | SS 410
-
-Rows:
-
-Overall Score
-
-Strength
-
-Corrosion Resistance
-
-Impact Toughness
-
-Temperature Suitability
-
-Weldability
-
-Formability
-
-Cost
-
-If an additional parameter was not selected, display Not considered or visually de-emphasize it.
-
-GRADE DETAILS
-
-Each recommendation should have a View Grade Details button.
-
-Open a modal/drawer containing:
-
-Grade
-
-Stainless steel family
-
-Typical applications
-
-Key properties
-
-Why recommended
-
-Main trade-offs
-
-Use dummy information for now.
-
-MOCK DATA / BACKEND READY
-
-Keep recommendation data separate from UI components.
-
-Create a mock recommendation structure containing:
-
-grade
-
-family
-
-overallScore
-
-individual scores
-
-whyRecommended
-
-tradeoffs
-
-applications
-
-properties
-
-Create a function such as:
-
-getRecommendations(userRequirements)
-
-For now, it returns mock data.
-
-Later this function will be replaced by a backend API, so do not tightly couple the UI to the dummy data.
-
-User input should have a structure similar to:
-
-application
-minimumUTS
-corrosionResistance
-impactToughness
-operatingTemperatureMin
-operatingTemperatureMax
-considerWeldability
-considerFormability
-considerCost
-
-Blank optional fields should remain null/empty.
-
-UX
-
-Add a note near the button:
-
-Only Application is required. Add more requirements to improve recommendation accuracy.
-
-Keep the interface simple and intuitive. The user should immediately understand:
-
-What information they need to provide
-
-Which fields are optional
-
-Which grade is the best match
-
-Why it was recommended
-
-What trade-offs exist
-
-FOOTER
-
-Minimal footer:
-
-Stainless Steel Grade Selector
-
-“Engineering material selection made simpler.”
-
-Add placeholder links:
-About | Methodology | Contact
-
-IMPORTANT
-
-This is currently a frontend prototype.
-
-Do not build the backend or actual steel-grade recommendation algorithm yet.
-
-Focus on creating a polished, professional frontend with clean component architecture so the backend recommendation engine can be connected later.
-
-This project was built with [Lovable](https://lovable.dev).
-
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/9c6a0299-615d-418c-ac9b-fd294cde6a75).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+**Built as a smart material-selection platform for stainless steel applications.**
 
 ## Development
 

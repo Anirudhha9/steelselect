@@ -50,7 +50,6 @@ export const CORROSION_OPTIONS: { value: CorrosionResistance; label: string }[] 
   { value: "low", label: "Low" },
   { value: "medium", label: "Medium" },
   { value: "high", label: "High" },
-  { value: "very-high", label: "Very High" },
 ];
 
 export type CoreScoreKey =
@@ -74,7 +73,7 @@ export const OPTIONAL_SCORE_KEYS: OptionalScoreKey[] = ["weldability", "formabil
 export const SCORE_LABELS: Record<ScoreKey, string> = {
   strength: "Strength",
   corrosionResistance: "Corrosion Resistance",
-  impactToughness: "Impact Toughness",
+  impactToughness: "Brinell Hardness",
   temperatureSuitability: "Temperature Suitability",
   weldability: "Weldability",
   formability: "Formability",
@@ -98,6 +97,12 @@ export interface GradeRecommendation {
   properties: { label: string; value: string }[];
 }
 
+export interface ClosestGrade {
+  name: string;
+  type: string;
+  failed: string[];
+}
+
 export interface RecommendationResult {
   recommendations: GradeRecommendation[];
   /** Optional parameters the user asked us to weigh in. */
@@ -106,6 +111,10 @@ export interface RecommendationResult {
   /** Set when the hard filters eliminated every grade. */
   error?: string;
   failedOn?: string[];
+  /** Closest grades that failed the fewest filters, when no exact match exists. */
+  closestGrades?: ClosestGrade[];
+  /** Set when the server call itself failed (network, API, unexpected error). */
+  serverError?: boolean;
 }
 
 /** UI application values -> engine weight-profile keys. */
@@ -154,7 +163,7 @@ function toGrade(g: RecommendedGrade): GradeRecommendation {
     scores: {
       strength: g.strength_bar,
       corrosionResistance: g.corrosion_bar,
-      impactToughness: g.toughness_bar,
+      impactToughness: g.hardness_bar,
       temperatureSuitability: g.temp_bar,
       weldability: g.parameter_scores.weldability ?? d.weldability_score,
       formability: g.parameter_scores.formability ?? d.formability_score,
@@ -196,30 +205,45 @@ export async function getRecommendations(
 
   const application = APPLICATION_PROFILE[requirements.application ?? "other"];
 
-  const response: RecommendResponse = await recommendGrades({
-    data: {
-      application,
-      app_column: APPLICATION_COLUMN[requirements.application ?? "other"],
-      uts: requirements.minimumUTS,
-      corrosion: requirements.corrosionResistance
-        ? CORROSION_TO_PREN[requirements.corrosionResistance]
-        : null,
-      // The "Brinell hardness" field in the form is stored on this key.
-      hardness: requirements.impactToughness,
-      min_temp: requirements.operatingTemperatureMin,
-      max_temp: requirements.operatingTemperatureMax,
-      weldability_required: requirements.considerWeldability,
-      formability_required: requirements.considerFormability,
-      cost_required: requirements.considerCost,
-    },
-  });
+  let response: RecommendResponse;
+  try {
+    response = await recommendGrades({
+      data: {
+        application,
+        app_column: APPLICATION_COLUMN[requirements.application ?? "other"],
+        uts: requirements.minimumUTS,
+        corrosion: requirements.corrosionResistance
+          ? CORROSION_TO_PREN[requirements.corrosionResistance]
+          : null,
+        // The "Brinell hardness" field in the form is stored on this key.
+        hardness: requirements.impactToughness,
+        min_temp: requirements.operatingTemperatureMin,
+        max_temp: requirements.operatingTemperatureMax,
+        weldability_required: requirements.considerWeldability,
+        formability_required: requirements.considerFormability,
+        cost_required: requirements.considerCost,
+      },
+    });
+  } catch {
+    return {
+      recommendations: [],
+      consideredOptional,
+      error: "Something went wrong while generating recommendations. Please try again.",
+      serverError: true,
+    };
+  }
 
   if ("error" in response) {
     return {
       recommendations: [],
       consideredOptional,
-      error: "No grade in the database satisfies every requirement.",
+      error: "No exact match found for your requirements.",
       failedOn: response.failed_on.map((k) => PARAM_LABELS[k] ?? k),
+      closestGrades: response.closest_grades.map((c) => ({
+        name: c.name,
+        type: c.type,
+        failed: c.failed.map((k) => PARAM_LABELS[k] ?? k),
+      })),
     };
   }
 

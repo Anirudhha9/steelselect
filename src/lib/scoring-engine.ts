@@ -85,8 +85,10 @@ export interface RecommendedGrade {
   final_score: number;
   strength_bar: number;
   corrosion_bar: number;
-  /** null => "data not available"; no toughness column exists in the dataset. */
+  /** null => "data not available"; no impact-toughness column exists in the dataset. */
   toughness_bar: number | null;
+  /** Brinell hardness bar (0-100), normalized across surviving grades. */
+  hardness_bar: number;
   temp_bar: number;
   why_this_grade: string;
   trade_offs: string[];
@@ -161,6 +163,10 @@ export const GRADES: PreparedGrade[] = (rawGrades as RawGrade[]).map((g) => {
     prenIndex: prenBucket(pren),
   };
 });
+
+const BHN_MIN = Math.min(...GRADES.map((g) => g.hardness));
+const BHN_MAX = Math.max(...GRADES.map((g) => g.hardness));
+const HARDNESS_RANGE = BHN_MAX - BHN_MIN;
 
 /* ------------------------------------------------------------------ *
  * Application weight profiles (must sum to 1.0)
@@ -293,7 +299,7 @@ export function recommend(req: RecommendRequest): RecommendResponse {
 
   // 5. Renormalize weights over the active parameters.
   const scoringParams: ParamKey[] = baseline
-    ? (["UTS", "corrosion", "hardness", "weldability", "formability", "cost"] as ParamKey[])
+    ? (["UTS", "corrosion", "weldability", "formability", "cost"] as ParamKey[])
     : active;
 
   const rawWeights = new Map<ParamKey, number>();
@@ -310,11 +316,12 @@ export function recommend(req: RecommendRequest): RecommendResponse {
     ["corrosion", normalizeSet(survivors.map((g) => g.pren))],
     [
       "hardness",
-      normalizeSet(
-        survivors.map((g) =>
-          req.hardness != null ? -Math.abs(g.hardness - req.hardness) : g.hardness,
-        ),
-      ),
+      req.hardness != null
+        ? survivors.map((g) => {
+            const diff = Math.abs(g.hardness - req.hardness);
+            return HARDNESS_RANGE > 0 ? clamp01(1 - diff / HARDNESS_RANGE) : 1;
+          })
+        : normalizeSet(survivors.map((g) => g.hardness)),
     ],
     [
       "temperature",
@@ -345,6 +352,7 @@ export function recommend(req: RecommendRequest): RecommendResponse {
         strength: Math.round(at("UTS", i) * 100),
         corrosion: Math.round(at("corrosion", i) * 100),
         temp: Math.round(at("temperature", i) * 100),
+        hardness: Math.round(at("hardness", i) * 100),
       },
     };
   });
@@ -367,7 +375,8 @@ export function recommend(req: RecommendRequest): RecommendResponse {
     final_score: s.score,
     strength_bar: s.bars.strength,
     corrosion_bar: s.bars.corrosion,
-    toughness_bar: null, // data not available
+    toughness_bar: null, // impact-toughness data not available
+    hardness_bar: s.bars.hardness,
     temp_bar: s.bars.temp,
     why_this_grade: WHY_PLACEHOLDER,
     trade_offs: [...TRADE_OFFS_PLACEHOLDER],
