@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Loader2, Sliders, Sparkles } from "lucide-react";
 
-import jslLogo from "@/assets/jsl-logo.png.asset.json";
 import { AIMode, type AIState, type ChatMessage } from "@/components/steel/AIMode";
 import { InfoDialog, type InfoDialogKind } from "@/components/steel/InfoDialogs";
 import { RequirementsForm } from "@/components/steel/RequirementsForm";
@@ -73,7 +72,7 @@ function Index() {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3.5 sm:px-8">
           <div className="flex items-center gap-3">
             <img
-              src={jslLogo.url}
+              src="/JSL.NS_BIG-9d94c2bf.png"
               alt="Jindal Stainless"
               className="h-9 w-auto object-contain"
             />
