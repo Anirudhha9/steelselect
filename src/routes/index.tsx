@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Loader2, Sliders, Sparkles } from "lucide-react";
 
 import jslLogo from "@/assets/jsl-logo.png.asset.json";
-import { AIMode } from "@/components/steel/AIMode";
+import { AIMode, type AIState, type ChatMessage } from "@/components/steel/AIMode";
 import { InfoDialog, type InfoDialogKind } from "@/components/steel/InfoDialogs";
 import { RequirementsForm } from "@/components/steel/RequirementsForm";
 import { ResultsView } from "@/components/steel/ResultsView";
@@ -40,6 +40,12 @@ function Index() {
   const [result, setResult] = useState<RecommendationResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [infoDialog, setInfoDialog] = useState<InfoDialogKind>(null);
+  const [aiState, setAIState] = useState<AIState>({
+    application: null,
+    environment: null,
+    costPreference: null,
+  });
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
   const handleSubmit = async () => {
     setLoading(true);
@@ -125,7 +131,12 @@ function Index() {
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-10 sm:px-8 sm:py-14">
         {mode === "ai" ? (
-          <AIMode />
+          <AIMode
+            aiState={aiState}
+            onAIStateChange={setAIState}
+            messages={chatMessages}
+            onMessagesChange={setChatMessages}
+          />
         ) : loading ? (
           <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 text-center">
             <span className="flex size-16 items-center justify-center rounded-2xl bg-primary-soft">

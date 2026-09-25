@@ -41,10 +41,10 @@ export interface AIState {
   costPreference: AICostPreference | null;
 }
 
-interface ChatMessage {
+export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
-  text: string;
+  content: string;
 }
 
 const APPLICATION_OPTIONS: { value: AIApplication; label: string }[] = [
@@ -84,12 +84,6 @@ const COST_OPTIONS: { value: AICostPreference; label: string }[] = [
   { value: "premium", label: "Premium" },
 ];
 
-const STARTER_PROMPTS = [
-  "Which grade is suitable for a coastal application?",
-  "I need a corrosion-resistant grade for machinery.",
-  "Help me choose a stainless steel grade.",
-];
-
 const selectClass =
   "h-11 w-full rounded-lg border border-input bg-card px-3.5 text-sm text-foreground shadow-xs outline-none transition-all hover:border-primary/35 focus:border-primary focus:ring-4 focus:ring-primary/12";
 
@@ -110,13 +104,17 @@ function Field({
   );
 }
 
-export function AIMode() {
-  const [aiState, setAIState] = useState<AIState>({
-    application: null,
-    environment: null,
-    costPreference: null,
-  });
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+export function AIMode({
+  aiState,
+  onAIStateChange,
+  messages,
+  onMessagesChange,
+}: {
+  aiState: AIState;
+  onAIStateChange: (next: AIState) => void;
+  messages: ChatMessage[];
+  onMessagesChange: (next: ChatMessage[]) => void;
+}) {
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -127,8 +125,8 @@ export function AIMode() {
 
   const send = (text: string) => {
     if (!text.trim()) return;
-    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", text };
-    setMessages((prev) => [...prev, userMsg]);
+    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: text };
+    onMessagesChange([...messages, userMsg]);
     setInput("");
     setThinking(true);
 
@@ -136,11 +134,11 @@ export function AIMode() {
       const aiMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
-        text: "AI recommendations will be available soon. This is a placeholder response — the AI backend integration is coming in a future update.",
+        content: "AI recommendation service is not connected yet. Your requirements have been received.",
       };
-      setMessages((prev) => [...prev, aiMsg]);
+      onMessagesChange([...messages, userMsg, aiMsg]);
       setThinking(false);
-    }, 1500);
+    }, 1200);
   };
 
   return (
@@ -168,10 +166,10 @@ export function AIMode() {
                 className={selectClass}
                 value={aiState.application ?? ""}
                 onChange={(e) =>
-                  setAIState((s) => ({
-                    ...s,
+                  onAIStateChange({
+                    ...aiState,
                     application: (e.target.value || null) as AIApplication | null,
-                  }))
+                  })
                 }
               >
                 <option value="">Select an application…</option>
@@ -188,10 +186,10 @@ export function AIMode() {
                 className={selectClass}
                 value={aiState.environment ?? ""}
                 onChange={(e) =>
-                  setAIState((s) => ({
-                    ...s,
+                  onAIStateChange({
+                    ...aiState,
                     environment: (e.target.value || null) as AIEnvironment | null,
-                  }))
+                  })
                 }
               >
                 <option value="">Select environment…</option>
@@ -210,11 +208,11 @@ export function AIMode() {
                     key={o.value}
                     type="button"
                     onClick={() =>
-                      setAIState((s) => ({
-                        ...s,
+                      onAIStateChange({
+                        ...aiState,
                         costPreference:
-                          s.costPreference === o.value ? null : o.value,
-                      }))
+                          aiState.costPreference === o.value ? null : o.value,
+                      })
                     }
                     className={cn(
                       "h-11 rounded-lg border text-sm font-medium transition-all",
@@ -294,7 +292,7 @@ export function AIMode() {
                         : "rounded-tl-sm border border-border bg-secondary/40 text-foreground",
                     )}
                   >
-                    {m.text}
+                    {m.content}
                   </div>
                 </div>
               ))}
