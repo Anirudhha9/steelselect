@@ -1,22 +1,24 @@
 /**
- * AI Mode server function — orchestrates the full AI pipeline:
+ * AI Mode — server-side processing function.
  *
- *   User message → Gemini (extract requirements) → AI recommendation engine
- *   → Gemini (explain recommendations) → final response
+ * This is a PLAIN async function, NOT a TanStack createServerFn.
+ * The API route calls this function directly.
  *
- * Also handles conversational follow-ups and general questions.
+ * Architecture:
+ *   User message → Gemini (understands requirements, compares DB, selects grades, explains)
+ *   → Backend validates grade selections against the database
+ *   → Response
  *
- * This is completely separate from Engineering Mode's recommend.functions.ts.
+ * Gemini performs the complete AI reasoning. The backend enforces the
+ * database boundary: only grades that exist in the database are allowed.
  */
 
-import { createServerFn } from "@tanstack/react-start";
-
-import { aiRecommend, type AIRequirements, type AIRecommendationResult } from "./ai-recommendation";
+import { MATERIAL_DATA, type MaterialPropertyRecord } from "./ai-recommendation";
 import {
-  conversationalFollowUp,
-  explainRecommendations,
-  extractRequirements,
   isGeminiConfigured,
+  processWithGemini,
+  type GeminiAIResponse,
+  type GeminiGradeSelection,
   type GeminiMessage,
 } from "./gemini";
 
@@ -32,11 +34,19 @@ export interface AIRecommendRequest {
   conversationHistory: { role: "user" | "assistant"; content: string }[];
 }
 
+export interface AIValidatedGrade {
+  grade: string;
+  reason: string;
+  properties: MaterialPropertyRecord;
+}
+
 export interface AIRecommendResponse {
   success: boolean;
   message: string;
-  requirements?: AIRequirements;
-  recommendations?: AIRecommendationResult;
+  isRecommendation: boolean;
+  isGeneralQuestion: boolean;
+  mentionedGradeUnavailable: string | null;
+  selectedGrades: AIValidatedGrade[];
   error?: string;
   geminiConfigured: boolean;
 }
@@ -45,7 +55,7 @@ export interface AIRecommendResponse {
  * Validation
  * ------------------------------------------------------------------ */
 
-function validate(input: unknown): AIRecommendRequest {
+function validateInput(input: unknown): AIRecommendRequest {
   const d = (input ?? {}) as Record<string, unknown>;
   const message = typeof d["message"] === "string" ? d["message"].trim() : "";
   if (!message) {
@@ -61,7 +71,6 @@ function validate(input: unknown): AIRecommendRequest {
         .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }))
     : [];
 
-  // Keep last 10 messages to stay within token limits
   const trimmedHistory = history.slice(-10);
 
   return {
@@ -74,88 +83,146 @@ function validate(input: unknown): AIRecommendRequest {
 }
 
 /* ------------------------------------------------------------------ *
- * Server function
+ * Database boundary enforcement
  * ------------------------------------------------------------------ */
 
-export const aiRecommendGrades = createServerFn({ method: "POST" })
-  .inputValidator(validate)
-  .handler(async ({ data }): Promise<AIRecommendResponse> => {
-    const geminiConfigured = isGeminiConfigured();
+function findGradeInDatabase(gradeName: string): MaterialPropertyRecord | null {
+  const q = gradeName.toLowerCase().trim();
+  return (
+    MATERIAL_DATA.find((g) => g.grade.toLowerCase() === q) ??
+    MATERIAL_DATA.find((g) => g.grade.toLowerCase().includes(q)) ??
+    MATERIAL_DATA.find((g) => g.name.toLowerCase().includes(q)) ??
+    null
+  );
+}
 
-    if (!geminiConfigured) {
-      return {
-        success: false,
-        message:
-          "The AI service is not configured. Please set the GEMINI_API_KEY environment variable to enable AI Mode.",
-        geminiConfigured: false,
-        error: "GEMINI_API_KEY not set",
-      };
+/**
+ * Validate Gemini's grade selections against the database.
+ * Any grade not in the database is filtered out and flagged.
+ */
+function validateGradeSelections(
+  selections: GeminiGradeSelection[],
+): { valid: AIValidatedGrade[]; invalid: string[] } {
+  const valid: AIValidatedGrade[] = [];
+  const invalid: string[] = [];
+
+  for (const sel of selections) {
+    const dbGrade = findGradeInDatabase(sel.grade);
+    if (dbGrade) {
+      valid.push({
+        grade: dbGrade.grade,
+        reason: sel.reason,
+        properties: dbGrade,
+      });
+    } else {
+      invalid.push(sel.grade);
+      console.warn(`[AI Mode] Gemini selected grade "${sel.grade}" which is NOT in the database — filtered out.`);
     }
+  }
 
-    // Convert conversation history to Gemini format
-    const geminiHistory: GeminiMessage[] = data.conversationHistory.map((m) => ({
-      role: m.role === "assistant" ? "model" : "user",
-      content: m.content,
-    }));
+  return { valid, invalid };
+}
 
-    try {
-      // Step 1: Extract structured requirements from the user's message
-      const extraction = await extractRequirements(
-        data.message,
-        data.application ?? undefined,
-        data.environment ?? undefined,
-        data.costPreference ?? undefined,
-        geminiHistory,
-      );
+/* ------------------------------------------------------------------ *
+ * Main processing function — called directly by the API route
+ * ------------------------------------------------------------------ */
 
-      // If it's a general question (not a material selection request), handle conversationally
-      if (extraction.isGeneralQuestion && extraction.requirements.minimumUTS == null && extraction.requirements.operatingTemperature == null && extraction.requirements.corrosionRequirement == null && !extraction.mentionedGrade) {
-        const response = await conversationalFollowUp(data.message, geminiHistory);
-        return {
-          success: true,
-          message: response,
-          requirements: extraction.requirements,
-          geminiConfigured: true,
-        };
-      }
+export async function processAIRecommendation(input: unknown): Promise<AIRecommendResponse> {
+  console.log("[AI Mode] Request reached AI handler");
 
-      // If the user mentioned a specific grade, handle conversationally with that grade's data
-      if (extraction.mentionedGrade && extraction.requirements.minimumUTS == null && extraction.requirements.operatingTemperature == null) {
-        const response = await conversationalFollowUp(data.message, geminiHistory);
-        return {
-          success: true,
-          message: response,
-          requirements: extraction.requirements,
-          geminiConfigured: true,
-        };
-      }
+  let data: AIRecommendRequest;
+  try {
+    data = validateInput(input);
+  } catch (err) {
+    console.error("[AI Mode] Validation error:", err instanceof Error ? err.message : String(err));
+    return {
+      success: false,
+      message: "Invalid request: " + (err instanceof Error ? err.message : "validation failed."),
+      isRecommendation: false,
+      isGeneralQuestion: false,
+      mentionedGradeUnavailable: null,
+      selectedGrades: [],
+      geminiConfigured: isGeminiConfigured(),
+      error: "validation_error",
+    };
+  }
 
-      // Step 2: Run the AI recommendation engine over the database
-      const result = aiRecommend(extraction.requirements);
+  const geminiConfigured = isGeminiConfigured();
+  console.log(`[AI Mode] GEMINI_API_KEY detected: ${geminiConfigured}`);
 
-      // Step 3: Generate the natural-language explanation via Gemini
-      const explanation = await explainRecommendations(
-        data.message,
-        extraction.requirements,
-        result,
-        geminiHistory,
-      );
+  if (!geminiConfigured) {
+    return {
+      success: false,
+      message:
+        "The AI service is not configured. The GEMINI_API_KEY environment variable must be set to enable AI Mode. Please contact the administrator.",
+      isRecommendation: false,
+      isGeneralQuestion: false,
+      mentionedGradeUnavailable: null,
+      selectedGrades: [],
+      geminiConfigured: false,
+      error: "GEMINI_API_KEY not set",
+    };
+  }
 
-      return {
-        success: true,
-        message: explanation,
-        requirements: extraction.requirements,
-        recommendations: result,
-        geminiConfigured: true,
-      };
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "An unexpected error occurred.";
-      console.error("AI Mode error:", errorMsg);
-      return {
-        success: false,
-        message: `I encountered an error while processing your request: ${errorMsg}. Please try rephrasing your question.`,
-        geminiConfigured: true,
-        error: errorMsg,
-      };
-    }
-  });
+  // Convert conversation history to Gemini format
+  const geminiHistory: GeminiMessage[] = data.conversationHistory.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    content: m.content,
+  }));
+
+  let geminiResult: GeminiAIResponse;
+  try {
+    geminiResult = await processWithGemini(
+      data.message,
+      data.application,
+      data.environment,
+      data.costPreference,
+      geminiHistory,
+    );
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : "An unexpected error occurred.";
+    console.error("[AI Mode] Gemini processing error:", errorMsg);
+    return {
+      success: false,
+      message: `I encountered an error while processing your request: ${errorMsg}. Please try rephrasing your question or try again later.`,
+      isRecommendation: false,
+      isGeneralQuestion: false,
+      mentionedGradeUnavailable: null,
+      selectedGrades: [],
+      geminiConfigured: true,
+      error: errorMsg,
+    };
+  }
+
+  // Validate Gemini's grade selections against the database
+  const { valid: validatedGrades, invalid: invalidGrades } = validateGradeSelections(
+    geminiResult.selectedGrades ?? [],
+  );
+
+  if (invalidGrades.length > 0) {
+    console.warn(`[AI Mode] ${invalidGrades.length} grade(s) from Gemini were not in the database and were removed.`);
+  }
+
+  // If Gemini said it's a recommendation but all grades were invalid, adjust the message
+  let finalMessage = geminiResult.explanation;
+  if (
+    geminiResult.isRecommendation &&
+    validatedGrades.length === 0 &&
+    invalidGrades.length > 0 &&
+    !geminiResult.mentionedGradeUnavailable
+  ) {
+    finalMessage =
+      "I was unable to find suitable grades in the current material database for your requirements. " +
+      finalMessage;
+  }
+
+  return {
+    success: true,
+    message: finalMessage,
+    isRecommendation: geminiResult.isRecommendation,
+    isGeneralQuestion: geminiResult.isGeneralQuestion,
+    mentionedGradeUnavailable: geminiResult.mentionedGradeUnavailable,
+    selectedGrades: validatedGrades,
+    geminiConfigured: true,
+  };
+}
