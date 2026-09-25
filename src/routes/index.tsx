@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Sliders, Sparkles } from "lucide-react";
 
 import jslLogo from "@/assets/jsl-logo.png.asset.json";
+import { AIMode } from "@/components/steel/AIMode";
 import { InfoDialog, type InfoDialogKind } from "@/components/steel/InfoDialogs";
 import { RequirementsForm } from "@/components/steel/RequirementsForm";
 import { ResultsView } from "@/components/steel/ResultsView";
@@ -13,6 +14,9 @@ import {
   type RecommendationResult,
   type UserRequirements,
 } from "@/lib/recommendations";
+import { cn } from "@/lib/utils";
+
+type Mode = "engineering" | "ai";
 
 const TITLE = "Stainless Steel Grade Selector";
 const DESCRIPTION =
@@ -31,6 +35,7 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
+  const [mode, setMode] = useState<Mode>("engineering");
   const [requirements, setRequirements] = useState<UserRequirements>(emptyRequirements);
   const [result, setResult] = useState<RecommendationResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -75,9 +80,37 @@ function Index() {
               </span>
             </span>
           </div>
-          <span className="hidden rounded-full border border-primary/25 bg-primary-soft px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary sm:inline-block">
-            Engineering Tool
-          </span>
+
+          <div className="flex items-center gap-3">
+            <div className="flex rounded-full border border-border bg-card p-0.5 shadow-xs">
+              <button
+                type="button"
+                onClick={() => setMode("engineering")}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all sm:px-4",
+                  mode === "engineering"
+                    ? "bg-gradient-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Sliders className="size-3.5" />
+                <span className="hidden sm:inline">Engineering</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("ai")}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all sm:px-4",
+                  mode === "ai"
+                    ? "bg-gradient-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Sparkles className="size-3.5" />
+                <span className="hidden sm:inline">AI</span>
+              </button>
+            </div>
+          </div>
         </div>
         <div className="mx-auto max-w-6xl border-t border-border/60 px-5 py-2 sm:px-8">
           <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-medium tracking-wide text-muted-foreground">
@@ -91,7 +124,9 @@ function Index() {
       </header>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-10 sm:px-8 sm:py-14">
-        {loading ? (
+        {mode === "ai" ? (
+          <AIMode />
+        ) : loading ? (
           <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 text-center">
             <span className="flex size-16 items-center justify-center rounded-2xl bg-primary-soft">
               <Loader2 className="size-8 animate-spin text-primary" />
