@@ -147,20 +147,25 @@ export function AIMode({
       const data = (await resp.json()) as {
         success: boolean;
         message: string;
+        error?: string;
         geminiConfigured: boolean;
       };
 
       const aiMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: data.message,
+        content: data.message || "I received an empty response. Please try rephrasing your question.",
       };
       onMessagesChange([...updatedMessages, aiMsg]);
-    } catch {
+    } catch (err) {
+      const errMsg =
+        err instanceof Error
+          ? `I couldn't reach the AI service: ${err.message}. Please check your connection and try again.`
+          : "I couldn't reach the AI service. Please check your connection and try again.";
       const aiMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: "I couldn't reach the AI service. Please check your connection and try again.",
+        content: errMsg,
       };
       onMessagesChange([...updatedMessages, aiMsg]);
     } finally {
