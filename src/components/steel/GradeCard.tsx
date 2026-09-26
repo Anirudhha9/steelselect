@@ -22,25 +22,30 @@ export function GradeCard({
   return (
     <article
       className={cn(
-        "relative flex flex-col rounded-2xl border bg-card p-6 transition-all hover:-translate-y-0.5",
+        "relative flex flex-col rounded-md border bg-card p-5 transition-colors",
         best
-          ? "border-primary/60 shadow-[var(--shadow-elevated)] ring-1 ring-primary/15"
-          : "border-border shadow-[var(--shadow-card)] hover:border-primary/30",
+          ? "border-primary/50 shadow-[var(--shadow-elevated)]"
+          : "border-border shadow-[var(--shadow-card)] hover:border-foreground/20",
       )}
     >
       {best ? (
-        <span className="absolute -top-3 left-5 rounded-full bg-gradient-primary px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-primary-foreground">
-          Best Match
-        </span>
+        <span className="absolute -top-px left-0 right-0 h-0.5 bg-primary" />
       ) : null}
 
-      <div className="flex items-center justify-between gap-4 pt-2">
+      <div className="flex items-start justify-between gap-4 pt-1">
         <div>
-          <h3 className="font-display text-xl font-bold text-foreground">{rec.grade}</h3>
-          <p className="text-xs text-muted-foreground">{rec.family}</p>
-          <p className="mt-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <h3 className="font-display text-lg font-bold text-foreground">{rec.grade}</h3>
+            {best ? (
+              <span className="bg-primary px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary-foreground">
+                Best Match
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-0.5 text-xs text-muted-foreground">{rec.family}</p>
+          <p className="mt-2 text-xs font-medium text-muted-foreground">
             Overall Score{" "}
-            <span className="font-display text-sm font-bold text-primary">
+            <span className="font-mono text-sm font-bold text-primary">
               {rec.overallScore} / 100
             </span>
           </p>
@@ -48,7 +53,7 @@ export function GradeCard({
         <ScoreDial score={rec.overallScore} />
       </div>
 
-      <div className="mt-5 space-y-3.5 border-t border-border pt-5">
+      <div className="mt-4 space-y-3 border-t border-border pt-4">
         {CORE_SCORE_KEYS.map((k) => (
           <ScoreBar key={k} label={SCORE_LABELS[k]} score={rec.scores[k]} />
         ))}
@@ -57,22 +62,22 @@ export function GradeCard({
         ))}
       </div>
 
-      <div className="mt-5 rounded-xl border border-primary/15 bg-primary-soft p-4">
-        <h4 className="mb-1 text-[10px] font-bold uppercase tracking-[0.16em] text-primary">
+      <div className="mt-4 border-t border-border pt-4">
+        <h4 className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-primary">
           Why this grade?
         </h4>
         <p className="text-sm leading-relaxed text-foreground">{rec.whyRecommended}</p>
       </div>
 
       <div className="mt-4">
-        <h4 className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+        <h4 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
           Key Trade-offs
         </h4>
         <ul className="space-y-1.5">
           {rec.tradeoffs.map((t) => (
             <li key={t.text} className="flex gap-2 text-sm">
               <span className={t.type === "positive" ? "text-success" : "text-warning"}>
-                {t.type === "positive" ? "✓" : "⚠"}
+                {t.type === "positive" ? "+" : "!"}
               </span>
               <span className="text-muted-foreground">{t.text}</span>
             </li>
@@ -80,7 +85,7 @@ export function GradeCard({
         </ul>
       </div>
 
-      <Button variant="subtle" className="mt-5 w-full" onClick={onViewDetails}>
+      <Button variant="subtle" className="mt-4 w-full" onClick={onViewDetails}>
         View Grade Details
       </Button>
     </article>

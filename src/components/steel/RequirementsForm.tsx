@@ -19,7 +19,7 @@ interface Props {
 }
 
 const fieldClass =
-  "h-11 w-full rounded-lg border border-input bg-card px-3.5 text-sm text-foreground shadow-xs outline-none transition-all placeholder:text-muted-foreground/70 hover:border-primary/35 focus:border-primary focus:ring-4 focus:ring-primary/12";
+  "h-10 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 hover:border-foreground/20 focus:border-primary focus:ring-1 focus:ring-primary/30";
 
 const INPUT_LIMITS = {
   uts: { min: 100, max: 2000 },
@@ -44,13 +44,13 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="border-t border-border px-5 py-8 first:border-t-0 sm:px-8">
-      <div className="mb-6 flex items-start gap-4">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary-soft font-display text-xs font-bold tracking-[0.06em] text-primary ring-1 ring-primary/20">
+    <section className="border-t border-border px-5 py-6 first:border-t-0 sm:px-6">
+      <div className="mb-5 flex items-start gap-3">
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-sm border border-border bg-secondary font-mono text-xs font-semibold text-muted-foreground">
           {index}
         </span>
         <div className="pt-0.5">
-          <h2 className="text-base font-semibold text-foreground sm:text-lg">{title}</h2>
+          <h2 className="text-sm font-semibold text-foreground">{title}</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
         </div>
       </div>
@@ -74,11 +74,11 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1.5 flex items-center gap-2 text-sm font-medium text-foreground">
+      <span className="mb-1.5 flex items-center gap-2 text-xs font-medium text-foreground">
         {label}
-        {unit ? <span className="text-xs font-normal text-muted-foreground">({unit})</span> : null}
+        {unit ? <span className="text-[11px] font-normal text-muted-foreground">({unit})</span> : null}
         {required ? (
-          <span className="rounded-sm bg-primary-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
+          <span className="bg-primary-soft px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-primary">
             Required
           </span>
         ) : null}
@@ -157,7 +157,7 @@ export function RequirementsForm({ value, onChange, onSubmit, loading }: Props) 
   };
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--shadow-card)]">
+    <div className="overflow-hidden rounded-md border border-border bg-card shadow-[var(--shadow-card)]">
       <Section index="01" title="Application" hint="Where will this material be used?">
         <div className="max-w-md">
           <Field label="Application" required>
@@ -182,10 +182,10 @@ export function RequirementsForm({ value, onChange, onSubmit, loading }: Props) 
 
       <Section
         index="02"
-        title="Performance Requirements"
+        title="Service Conditions & Requirements"
         hint="Fill in what you know."
       >
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Minimum UTS" unit="MPa" error={fieldErrors.uts}>
             <input
               type="number"
@@ -303,15 +303,15 @@ export function RequirementsForm({ value, onChange, onSubmit, loading }: Props) 
                 aria-pressed={active}
                 onClick={() => set(item.key, !active)}
                 className={cn(
-                  "flex cursor-pointer items-start gap-3 rounded-xl border p-4 text-left transition-all",
+                  "flex cursor-pointer items-start gap-3 rounded-md border p-3.5 text-left transition-colors",
                   active
-                    ? "border-primary/60 bg-primary-soft shadow-[var(--shadow-card)]"
-                    : "border-border bg-card hover:border-primary/40 hover:bg-accent/40",
+                    ? "border-primary/50 bg-primary-soft"
+                    : "border-border bg-card hover:border-foreground/20 hover:bg-secondary",
                 )}
               >
                 <span
                   className={cn(
-                    "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md border transition-colors",
+                    "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-sm border transition-colors",
                     active ? "border-primary bg-primary" : "border-input bg-background",
                   )}
                 >
@@ -327,11 +327,11 @@ export function RequirementsForm({ value, onChange, onSubmit, loading }: Props) 
         </div>
       </Section>
 
-      <div className="border-t border-border bg-secondary/50 px-5 py-7 sm:px-8">
+      <div className="border-t border-border bg-secondary/50 px-5 py-5 sm:px-6">
         {error ? (
           <div
             role="alert"
-            className="mb-4 flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+            className="mb-3 flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
           >
             <AlertCircle className="size-4" />
             {error}

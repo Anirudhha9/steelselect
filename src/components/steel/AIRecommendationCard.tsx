@@ -14,10 +14,6 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-/* ------------------------------------------------------------------ *
- * Types — mirror the server response shape
- * ------------------------------------------------------------------ */
-
 interface MaterialProperties {
   grade: string;
   name: string;
@@ -47,10 +43,6 @@ export interface AIValidatedGrade {
   properties: MaterialProperties;
 }
 
-/* ------------------------------------------------------------------ *
- * Label helpers
- * ------------------------------------------------------------------ */
-
 function scoreLabel(score: number): string {
   if (score >= 80) return "Excellent";
   if (score >= 60) return "Good";
@@ -79,7 +71,6 @@ function strengthLabel(uts: number): string {
   return "Low";
 }
 
-/** Strip the manufacturing-condition suffix from the grade title. */
 function cleanGradeName(grade: string): {
   base: string;
   condition: string | null;
@@ -87,17 +78,12 @@ function cleanGradeName(grade: string): {
   const match = grade.match(/^(.+?)\s*\(([^)]+)\)$/);
   if (match) {
     const condition = match[2].replace(/_/g, " ").trim();
-    // Skip non-condition parentheticals like UNS designations
     if (/^(hot|cold|annealed|tempered|quenched)/i.test(condition)) {
       return { base: match[1].trim(), condition };
     }
   }
   return { base: grade, condition: null };
 }
-
-/* ------------------------------------------------------------------ *
- * Property row with optional tooltip
- * ------------------------------------------------------------------ */
 
 function PropertyRow({
   label,
@@ -129,19 +115,15 @@ function PropertyRow({
       </span>
       <span
         className={cn(
-          "text-xs font-semibold tabular-nums",
+          "text-xs font-mono font-semibold tabular-nums",
           unavailable ? "italic font-normal text-muted-foreground/60" : "text-foreground",
         )}
       >
-        {unavailable ? "Data not available" : value}
+        {unavailable ? "N/A" : value}
       </span>
     </div>
   );
 }
-
-/* ------------------------------------------------------------------ *
- * Main card
- * ------------------------------------------------------------------ */
 
 export function AIRecommendationCard({
   grade,
@@ -157,30 +139,35 @@ export function AIRecommendationCard({
   return (
     <article
       className={cn(
-        "relative flex flex-col rounded-2xl border bg-card p-5 transition-all",
+        "relative flex flex-col rounded-md border bg-card p-5 transition-colors",
         isBest
-          ? "border-primary/60 shadow-[var(--shadow-elevated)] ring-1 ring-primary/15"
+          ? "border-primary/50 shadow-[var(--shadow-elevated)]"
           : "border-border shadow-[var(--shadow-card)]",
       )}
     >
       {isBest ? (
-        <span className="absolute -top-3 left-5 inline-flex items-center gap-1 rounded-full bg-gradient-primary px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-primary-foreground">
-          <Award className="size-3" />
-          Top Recommendation
-        </span>
-      ) : (
-        <span className="absolute -top-3 left-5 rounded-full bg-secondary px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-          Option {rank + 1}
-        </span>
-      )}
+        <span className="absolute -top-px left-0 right-0 h-0.5 bg-primary" />
+      ) : null}
 
       {/* Header */}
-      <div className="pt-2">
+      <div className="pt-1">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h4 className="font-display text-lg font-bold leading-tight text-foreground">
-              {base}
-            </h4>
+            <div className="flex items-center gap-2">
+              <h4 className="font-display text-base font-bold leading-tight text-foreground">
+                {base}
+              </h4>
+              {isBest ? (
+                <span className="inline-flex items-center gap-1 bg-primary px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary-foreground">
+                  <Award className="size-2.5" />
+                  Top
+                </span>
+              ) : (
+                <span className="bg-secondary px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Option {rank + 1}
+                </span>
+              )}
+            </div>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <Badge variant="secondary" className="text-[10px] font-semibold uppercase tracking-wide">
                 {p.type}
@@ -199,8 +186,8 @@ export function AIRecommendationCard({
       </div>
 
       {/* Why it fits */}
-      <div className="mt-4 rounded-xl border border-primary/15 bg-primary-soft p-3.5">
-        <h5 className="mb-1 text-[10px] font-bold uppercase tracking-[0.16em] text-primary">
+      <div className="mt-4 border-t border-border pt-3.5">
+        <h5 className="mb-1 text-[10px] font-bold uppercase tracking-wider text-primary">
           Why it fits
         </h5>
         <p className="text-sm leading-relaxed text-foreground">{grade.reason}</p>
@@ -208,7 +195,7 @@ export function AIRecommendationCard({
 
       {/* Key properties */}
       <div className="mt-4">
-        <h5 className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+        <h5 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
           Key Properties
         </h5>
         <div className="divide-y divide-border/50">
@@ -263,7 +250,7 @@ export function AIRecommendationCard({
 
       {/* Trade-offs */}
       <div className="mt-4">
-        <h5 className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+        <h5 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
           Trade-offs
         </h5>
         <ul className="space-y-1.5">

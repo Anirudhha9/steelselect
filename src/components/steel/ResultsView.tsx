@@ -46,34 +46,34 @@ export function ResultsView({
   const summary = summarize(requirements);
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
       <header>
-        <h1 className="font-display text-3xl font-bold text-foreground sm:text-4xl">
+        <h1 className="font-display text-2xl font-bold text-foreground sm:text-3xl">
           Recommended Stainless Steel Grades
         </h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
+        <p className="mt-1.5 max-w-2xl text-sm text-muted-foreground">
           Based on your selected requirements, these grades offer the best overall fit.
         </p>
       </header>
 
-      <section className="rounded-2xl border border-border bg-gradient-hero p-6 shadow-[var(--shadow-card)]">
+      <section className="rounded-md border border-border bg-card p-5 shadow-[var(--shadow-card)]">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex-1">
-            <h2 className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-primary">
-              Your requirements
+            <h2 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-primary">
+              Selection Basis — Your Requirements
             </h2>
-            <dl className="flex flex-wrap gap-x-8 gap-y-3">
+            <dl className="flex flex-wrap gap-x-8 gap-y-2.5">
               {summary.map((s) => (
                 <div key={s.label}>
-                  <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">
                     {s.label}
                   </dt>
-                  <dd className="text-sm font-semibold text-foreground">{s.value}</dd>
+                  <dd className="font-mono text-sm font-semibold text-foreground">{s.value}</dd>
                 </div>
               ))}
               {result.consideredOptional.length > 0 ? (
                 <div>
-                  <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">
                     Also considering
                   </dt>
                   <dd className="text-sm font-semibold text-foreground">
@@ -91,7 +91,7 @@ export function ResultsView({
       </section>
 
       {result.serverError ? (
-        <section className="rounded-2xl border border-destructive/30 bg-destructive/5 p-6">
+        <section className="rounded-md border border-destructive/30 bg-destructive/5 p-5">
           <div className="flex items-start gap-3">
             <AlertCircle className="mt-0.5 size-5 shrink-0 text-destructive" />
             <div className="flex-1">
@@ -111,7 +111,7 @@ export function ResultsView({
           </div>
         </section>
       ) : result.error ? (
-        <section className="rounded-2xl border border-warning/30 bg-warning/5 p-6">
+        <section className="rounded-md border border-warning/30 bg-warning/5 p-5">
           <div className="flex items-start gap-3">
             <AlertCircle className="mt-0.5 size-5 shrink-0 text-warning" />
             <div className="flex-1">
@@ -134,7 +134,7 @@ export function ResultsView({
 
               {result.closestGrades?.length ? (
                 <div className="mt-5">
-                  <h3 className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">
+                  <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-primary">
                     Closest alternatives
                   </h3>
                   <p className="mb-3 text-sm text-muted-foreground">
@@ -144,7 +144,7 @@ export function ResultsView({
                     {result.closestGrades.map((g) => (
                       <li
                         key={g.name}
-                        className="flex items-start justify-between gap-4 rounded-lg border border-border bg-card px-4 py-3"
+                        className="flex items-start justify-between gap-4 rounded-md border border-border bg-card px-4 py-3"
                       >
                         <div>
                           <p className="text-sm font-semibold text-foreground">{g.name}</p>
@@ -178,7 +178,7 @@ export function ResultsView({
             </p>
           ) : null}
 
-          <div className="grid gap-6 lg:grid-cols-3">
+          <div className="grid gap-5 lg:grid-cols-3">
             {result.recommendations.map((rec, i) => (
               <GradeCard
                 key={rec.grade}
@@ -191,7 +191,7 @@ export function ResultsView({
           </div>
 
           <section>
-            <h2 className="mb-4 font-display text-xl font-bold text-foreground">
+            <h2 className="mb-4 font-display text-lg font-bold text-foreground">
               Side-by-side comparison
             </h2>
             <ComparisonTable
