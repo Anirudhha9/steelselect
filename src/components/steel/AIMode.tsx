@@ -3,6 +3,10 @@ import { Send, Sparkles, User, Bot } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  AIRecommendationCard,
+  type AIValidatedGrade,
+} from "./AIRecommendationCard";
 
 export type AIApplication =
   | "construction"
@@ -85,7 +89,7 @@ const COST_OPTIONS: { value: AICostPreference; label: string }[] = [
 ];
 
 const selectClass =
-  "h-11 w-full rounded-lg border border-input bg-card px-3.5 text-sm text-foreground shadow-xs outline-none transition-all hover:border-primary/35 focus:border-primary focus:ring-4 focus:ring-primary/12";
+  "h-10 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground outline-none transition-colors hover:border-foreground/20 focus:border-primary focus:ring-1 focus:ring-primary/30";
 
 function Field({
   label,
@@ -117,6 +121,7 @@ export function AIMode({
 }) {
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
+  const [currentGrades, setCurrentGrades] = useState<AIValidatedGrade[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -174,199 +179,223 @@ export function AIMode({
   };
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[400px_1fr]">
-      {/* Input section */}
-      <div className="space-y-6">
-        <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--shadow-card)]">
-          <div className="border-b border-border bg-gradient-hero px-5 py-6 sm:px-8">
-            <div className="mb-2 flex items-center gap-2">
-              <span className="flex size-9 items-center justify-center rounded-xl bg-primary-soft">
-                <Sparkles className="size-5 text-primary" />
-              </span>
-              <div>
-                <h2 className="font-display text-lg font-bold text-foreground">AI Assistant</h2>
-                <p className="text-xs text-muted-foreground">
-                  Describe your needs and get intelligent recommendations.
+    <div className="space-y-6">
+      {/* Top row: input + chat */}
+      <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
+        {/* Input section */}
+        <div className="space-y-5">
+          <div className="overflow-hidden rounded-md border border-border bg-card shadow-[var(--shadow-card)]">
+            <div className="border-b border-border bg-card px-5 py-4 sm:px-6">
+              <div className="mb-1 flex items-center gap-2">
+                <span className="flex size-7 items-center justify-center rounded-sm border border-border bg-secondary">
+                  <Sparkles className="size-3.5 text-primary" />
+                </span>
+                <div>
+                  <h2 className="font-display text-sm font-bold text-foreground">AI Assistant</h2>
+                  <p className="text-[11px] text-muted-foreground">
+                    Describe your needs and get intelligent recommendations.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4 px-5 py-5 sm:px-6">
+              <Field label="Application">
+                <select
+                  className={selectClass}
+                  value={aiState.application ?? ""}
+                  onChange={(e) =>
+                    onAIStateChange({
+                      ...aiState,
+                      application: (e.target.value || null) as AIApplication | null,
+                    })
+                  }
+                >
+                  <option value="">Select an application…</option>
+                  {APPLICATION_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Environment">
+                <select
+                  className={selectClass}
+                  value={aiState.environment ?? ""}
+                  onChange={(e) =>
+                    onAIStateChange({
+                      ...aiState,
+                      environment: (e.target.value || null) as AIEnvironment | null,
+                    })
+                  }
+                >
+                  <option value="">Select environment…</option>
+                  {ENVIRONMENT_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Cost Preference">
+                <div className="grid grid-cols-3 gap-2">
+                  {COST_OPTIONS.map((o) => (
+                    <button
+                      key={o.value}
+                      type="button"
+                      onClick={() =>
+                        onAIStateChange({
+                          ...aiState,
+                          costPreference:
+                            aiState.costPreference === o.value ? null : o.value,
+                        })
+                      }
+                      className={cn(
+                        "h-10 rounded-md border text-sm font-medium transition-colors",
+                        aiState.costPreference === o.value
+                          ? "border-primary/50 bg-primary-soft text-primary"
+                          : "border-input bg-card text-muted-foreground hover:border-foreground/20 hover:text-foreground",
+                      )}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+            </div>
+          </div>
+        </div>
+
+        {/* Chat section — conversation only, no recommendation cards */}
+        <div className="flex h-[420px] flex-col overflow-hidden rounded-md border border-border bg-card shadow-[var(--shadow-card)]">
+          <div className="flex items-center gap-2 border-b border-border bg-card px-5 py-3">
+            <span className="flex size-7 items-center justify-center rounded-sm border border-border bg-secondary">
+              <Bot className="size-3.5 text-primary" />
+            </span>
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                AI Chat
+              </h3>
+              <p className="text-[11px] text-muted-foreground">
+                Conversational grade recommendations
+              </p>
+            </div>
+          </div>
+
+          <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-5 py-6">
+            {messages.length === 0 && !thinking ? (
+              <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+                <span className="flex size-12 items-center justify-center rounded-md border border-border bg-secondary">
+                  <Sparkles className="size-6 text-primary" />
+                </span>
+                <p className="font-display text-sm font-semibold text-foreground">
+                  Start a conversation
+                </p>
+                <p className="max-w-xs text-xs text-muted-foreground">
+                  Describe your application or ask about stainless steel grades to get started.
                 </p>
               </div>
-            </div>
-          </div>
-
-          <div className="space-y-5 px-5 py-6 sm:px-8">
-            <Field label="Application">
-              <select
-                className={selectClass}
-                value={aiState.application ?? ""}
-                onChange={(e) =>
-                  onAIStateChange({
-                    ...aiState,
-                    application: (e.target.value || null) as AIApplication | null,
-                  })
-                }
-              >
-                <option value="">Select an application…</option>
-                {APPLICATION_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </Field>
-
-            <Field label="Environment">
-              <select
-                className={selectClass}
-                value={aiState.environment ?? ""}
-                onChange={(e) =>
-                  onAIStateChange({
-                    ...aiState,
-                    environment: (e.target.value || null) as AIEnvironment | null,
-                  })
-                }
-              >
-                <option value="">Select environment…</option>
-                {ENVIRONMENT_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </Field>
-
-            <Field label="Cost Preference">
-              <div className="grid grid-cols-3 gap-2">
-                {COST_OPTIONS.map((o) => (
-                  <button
-                    key={o.value}
-                    type="button"
-                    onClick={() =>
-                      onAIStateChange({
-                        ...aiState,
-                        costPreference:
-                          aiState.costPreference === o.value ? null : o.value,
-                      })
-                    }
-                    className={cn(
-                      "h-11 rounded-lg border text-sm font-medium transition-all",
-                      aiState.costPreference === o.value
-                        ? "border-primary bg-primary-soft text-primary"
-                        : "border-input bg-card text-muted-foreground hover:border-primary/35 hover:text-foreground",
-                    )}
-                  >
-                    {o.label}
-                  </button>
-                ))}
-              </div>
-            </Field>
-          </div>
-        </div>
-
-      </div>
-
-      {/* Chat section */}
-      <div className="flex h-[calc(100vh-280px)] min-h-[400px] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--shadow-card)]">
-        <div className="flex items-center gap-2 border-b border-border bg-gradient-hero px-5 py-4">
-          <span className="flex size-8 items-center justify-center rounded-lg bg-primary-soft">
-            <Bot className="size-4 text-primary" />
-          </span>
-          <div>
-            <h3 className="font-display text-sm font-bold uppercase tracking-wider text-foreground">
-              AI Chat
-            </h3>
-            <p className="text-[11px] text-muted-foreground">
-              Conversational grade recommendations
-            </p>
-          </div>
-        </div>
-
-        <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-5 py-6">
-          {messages.length === 0 && !thinking ? (
-            <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-              <span className="flex size-14 items-center justify-center rounded-2xl bg-primary-soft">
-                <Sparkles className="size-7 text-primary" />
-              </span>
-              <p className="font-display text-base font-semibold text-foreground">
-                Start a conversation
-              </p>
-              <p className="max-w-xs text-sm text-muted-foreground">
-                Describe your application or ask about stainless steel grades to get started.
-              </p>
-            </div>
-          ) : (
-            <>
-              {messages.map((m) => (
-                <div
-                  key={m.id}
-                  className={cn(
-                    "flex gap-3",
-                    m.role === "user" ? "flex-row-reverse" : "flex-row",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "flex size-8 shrink-0 items-center justify-center rounded-lg",
-                      m.role === "user"
-                        ? "bg-secondary"
-                        : "bg-primary-soft",
-                    )}
-                  >
-                    {m.role === "user" ? (
-                      <User className="size-4 text-muted-foreground" />
-                    ) : (
-                      <Bot className="size-4 text-primary" />
-                    )}
-                  </span>
+            ) : (
+              <>
+                {messages.map((m) => (
                   <div
+                    key={m.id}
                     className={cn(
-                      "max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
-                      m.role === "user"
-                        ? "rounded-tr-sm bg-primary text-primary-foreground"
-                        : "rounded-tl-sm border border-border bg-secondary/40 text-foreground",
+                      "flex gap-3",
+                      m.role === "user" ? "flex-row-reverse" : "flex-row",
                     )}
                   >
-                    {m.content}
+                    <span
+                      className={cn(
+                        "flex size-7 shrink-0 items-center justify-center rounded-sm border",
+                        m.role === "user"
+                          ? "border-border bg-secondary"
+                          : "border-primary/20 bg-primary-soft",
+                      )}
+                    >
+                      {m.role === "user" ? (
+                        <User className="size-4 text-muted-foreground" />
+                      ) : (
+                        <Bot className="size-4 text-primary" />
+                      )}
+                    </span>
+                    <div
+                      className={cn(
+                        "max-w-[85%] whitespace-pre-wrap rounded-md px-3.5 py-2.5 text-sm leading-relaxed",
+                        m.role === "user"
+                          ? "bg-primary text-primary-foreground"
+                          : "border border-border bg-secondary/40 text-foreground",
+                      )}
+                    >
+                      {m.content}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
 
-              {thinking ? (
-                <div className="flex gap-3">
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary-soft">
-                    <Bot className="size-4 text-primary" />
-                  </span>
-                  <div className="flex items-center gap-1.5 rounded-2xl rounded-tl-sm border border-border bg-secondary/40 px-4 py-3">
-                    <span className="size-2 animate-bounce rounded-full bg-primary/50 [animation-delay:0ms]" />
-                    <span className="size-2 animate-bounce rounded-full bg-primary/50 [animation-delay:150ms]" />
-                    <span className="size-2 animate-bounce rounded-full bg-primary/50 [animation-delay:300ms]" />
+                {thinking ? (
+                  <div className="flex gap-3">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary-soft">
+                      <Bot className="size-4 text-primary" />
+                    </span>
+                    <div className="flex items-center gap-1.5 rounded-md border border-border bg-secondary/40 px-3.5 py-2.5">
+                      <span className="size-2 animate-bounce rounded-full bg-primary/50 [animation-delay:0ms]" />
+                      <span className="size-2 animate-bounce rounded-full bg-primary/50 [animation-delay:150ms]" />
+                      <span className="size-2 animate-bounce rounded-full bg-primary/50 [animation-delay:300ms]" />
+                    </div>
                   </div>
-                </div>
-              ) : null}
-            </>
-          )}
-        </div>
+                ) : null}
+              </>
+            )}
+          </div>
 
-        <div className="border-t border-border p-4">
-          <div className="flex items-center gap-3">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && send(input)}
-              placeholder="Describe your application or ask about stainless steel grades…"
-              className="h-11 flex-1 rounded-lg border border-input bg-card px-4 text-sm text-foreground shadow-xs outline-none transition-all placeholder:text-muted-foreground/70 hover:border-primary/35 focus:border-primary focus:ring-4 focus:ring-primary/12"
-            />
-            <Button
-              variant="hero"
-              size="icon"
-              onClick={() => send(input)}
-              disabled={!input.trim() || thinking}
-              className="size-11 shrink-0"
-            >
-              <Send className="size-5" />
-            </Button>
+          <div className="border-t border-border p-3">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && send(input)}
+                placeholder="Describe your application or ask about stainless steel grades…"
+                className="h-10 flex-1 rounded-md border border-input bg-card px-3.5 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 hover:border-foreground/20 focus:border-primary focus:ring-1 focus:ring-primary/30"
+              />
+              <Button
+                variant="hero"
+                size="icon"
+                onClick={() => send(input)}
+                disabled={!input.trim() || thinking}
+                className="size-10 shrink-0"
+              >
+                <Send className="size-5" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Dedicated recommendation section — only shown when grades exist */}
+      {currentGrades.length > 0 ? (
+        <section className="space-y-4">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <h2 className="font-display text-lg font-bold text-foreground">
+                Recommended Grades
+              </h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Based on your application requirements
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {currentGrades.map((g, i) => (
+              <AIRecommendationCard key={`${g.grade}-${i}`} grade={g} rank={i} />
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

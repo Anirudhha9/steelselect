@@ -17,16 +17,16 @@ import { cn } from "@/lib/utils";
 
 type Mode = "engineering" | "ai";
 
-const TITLE = "Stainless Steel Grade Selector";
+const TITLE = "SteelSelect";
 const DESCRIPTION =
   "Find the right stainless steel grade for your application — compare strength, corrosion resistance, toughness, weldability and cost.";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Stainless Steel Grade Selector — Material Selection Tool" },
+      { title: "SteelSelect — Stainless Steel Grade Selection System" },
       { name: "description", content: DESCRIPTION },
-      { property: "og:title", content: "Stainless Steel Grade Selector" },
+      { property: "og:title", content: "SteelSelect" },
       { property: "og:description", content: DESCRIPTION },
     ],
   }),
@@ -68,33 +68,34 @@ function Index() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      <header className="sticky top-0 z-30 border-b border-border/80 bg-card/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3.5 sm:px-8">
+      <header className="sticky top-0 z-30 border-b border-border bg-card">
+        <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-4 px-5 py-2.5 sm:px-8">
           <div className="flex items-center gap-3">
             <img
               src="/JSL.NS_BIG-9d94c2bf.png"
               alt="Jindal Stainless"
-              className="h-9 w-auto object-contain"
+              className="h-8 w-auto object-contain"
             />
+            <div className="h-8 w-px bg-border" />
             <span className="leading-tight">
-              <span className="block font-display text-sm font-bold uppercase tracking-[0.14em] text-foreground">
-                Grade Selector
+              <span className="block font-display text-sm font-bold tracking-tight text-foreground">
+                SteelSelect
               </span>
-              <span className="block text-[11px] text-muted-foreground">
-                Stainless steel material selection
+              <span className="block text-[10px] text-muted-foreground">
+                Stainless Steel Grade Selection System
               </span>
             </span>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="flex rounded-full border border-border bg-card p-0.5 shadow-xs">
+            <div className="flex rounded-md border border-border bg-card p-0.5">
               <button
                 type="button"
                 onClick={() => setMode("engineering")}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all sm:px-4",
+                  "flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-semibold transition-colors",
                   mode === "engineering"
-                    ? "bg-gradient-primary text-primary-foreground shadow-sm"
+                    ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -105,9 +106,9 @@ function Index() {
                 type="button"
                 onClick={() => setMode("ai")}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all sm:px-4",
+                  "flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-semibold transition-colors",
                   mode === "ai"
-                    ? "bg-gradient-primary text-primary-foreground shadow-sm"
+                    ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -117,18 +118,18 @@ function Index() {
             </div>
           </div>
         </div>
-        <div className="mx-auto max-w-6xl border-t border-border/60 px-5 py-2 sm:px-8">
-          <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-medium tracking-wide text-muted-foreground">
+        <div className="mx-auto max-w-[1400px] border-t border-border/60 px-5 py-1.5 sm:px-8">
+          <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] font-medium tracking-wide text-muted-foreground">
             <span>75+ grades</span>
-            <span className="hidden h-1 w-1 rounded-full bg-primary/60 sm:inline" />
+            <span className="hidden h-1 w-1 rounded-full bg-border sm:inline" />
             <span className="hidden sm:inline">Multi-parameter scoring</span>
-            <span className="hidden h-1 w-1 rounded-full bg-primary/60 sm:inline" />
+            <span className="hidden h-1 w-1 rounded-full bg-border sm:inline" />
             <span className="hidden sm:inline">Engineering-based recommendations</span>
           </p>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-10 sm:px-8 sm:py-14">
+      <main className="mx-auto w-full max-w-[1400px] flex-1 px-5 py-8 sm:px-8 sm:py-10">
         {mode === "ai" ? (
           <AIMode
             aiState={aiState}
@@ -138,10 +139,10 @@ function Index() {
           />
         ) : loading ? (
           <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 text-center">
-            <span className="flex size-16 items-center justify-center rounded-2xl bg-primary-soft">
-              <Loader2 className="size-8 animate-spin text-primary" />
+            <span className="flex size-14 items-center justify-center rounded-md border border-border bg-card">
+              <Loader2 className="size-7 animate-spin text-primary" />
             </span>
-            <p className="font-display text-lg font-semibold text-foreground">
+            <p className="font-display text-base font-semibold text-foreground">
               Analyzing your requirements...
             </p>
             <p className="text-sm text-muted-foreground">
@@ -156,7 +157,7 @@ function Index() {
             onRetry={handleSubmit}
           />
         ) : (
-          <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
+          <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
             <div>
               <RequirementsForm
                 value={requirements}
@@ -171,7 +172,7 @@ function Index() {
       </main>
 
       <footer className="mt-6 border-t border-border bg-card">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-5 py-8 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+        <div className="mx-auto flex max-w-[1400px] flex-col gap-3 px-5 py-6 sm:flex-row sm:items-center sm:justify-between sm:px-8">
           <div>
             <p className="font-display text-sm font-bold text-foreground">{TITLE}</p>
             <p className="text-xs text-muted-foreground">
