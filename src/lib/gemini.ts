@@ -35,6 +35,10 @@ export function isGeminiConfigured(): boolean {
  * Types
  * ------------------------------------------------------------------ */
 
+/**
+ * Internal message format used between functions in this file.
+ * Converted to Gemini's REST format before sending.
+ */
 export interface GeminiMessage {
   role: "user" | "model";
   content: string;
@@ -54,17 +58,27 @@ export interface GeminiAIResponse {
 }
 
 /* ------------------------------------------------------------------ *
- * Low-level Gemini call
+ * Gemini REST API types (the wire format)
  * ------------------------------------------------------------------ */
 
-interface GeminiResponse {
+interface GeminiRestContent {
+  role: "user" | "model";
+  parts: Array<{ text: string }>;
+}
+
+interface GeminiRestResponse {
   candidates?: Array<{
     content?: {
       parts?: Array<{ text?: string }>;
     };
+    finishReason?: string;
   }>;
-  error?: { message?: string };
+  error?: { message?: string; code?: number; status?: string };
 }
+
+/* ------------------------------------------------------------------ *
+ * Low-level Gemini call
+ * ------------------------------------------------------------------ */
 
 async function callGemini(
   systemPrompt: string,
@@ -77,11 +91,29 @@ async function callGemini(
   }
 
   console.log("[AI Mode] Gemini request started");
+  console.log(`[AI Mode] Model: ${GEMINI_MODEL}`);
+  console.log(`[AI Mode] History messages: ${conversationHistory.length}`);
 
-  const contents: GeminiMessage[] = [...conversationHistory, { role: "user", content: userMessage }];
+  // Build contents in Gemini REST format: each item must have { role, parts: [{ text }] }
+  const contents: GeminiRestContent[] = [];
+
+  for (const msg of conversationHistory) {
+    contents.push({
+      role: msg.role,
+      parts: [{ text: msg.content }],
+    });
+  }
+
+  // Add the current user message
+  contents.push({
+    role: "user",
+    parts: [{ text: userMessage }],
+  });
 
   const body = {
-    system_instruction: { parts: [{ text: systemPrompt }] },
+    system_instruction: {
+      parts: [{ text: systemPrompt }],
+    },
     contents,
     generationConfig: {
       temperature: 0.4,
@@ -93,6 +125,8 @@ async function callGemini(
 
   const url = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
 
+  console.log(`[AI Mode] Sending POST to Gemini API...`);
+
   let resp: Response;
   try {
     resp = await fetch(url, {
@@ -101,32 +135,52 @@ async function callGemini(
       body: JSON.stringify(body),
     });
   } catch (fetchErr) {
-    console.error("[AI Mode] Gemini fetch failed:", fetchErr instanceof Error ? fetchErr.message : String(fetchErr));
-    throw new Error(`Network error reaching Gemini API: ${fetchErr instanceof Error ? fetchErr.message : "unknown"}`);
+    console.error(
+      "[AI Mode] Gemini fetch failed:",
+      fetchErr instanceof Error ? fetchErr.message : String(fetchErr),
+    );
+    throw new Error(
+      `Network error reaching Gemini API: ${fetchErr instanceof Error ? fetchErr.message : "unknown"}`,
+    );
   }
 
-  console.log(`[AI Mode] Gemini response status: ${resp.status}`);
+  console.log(`[AI Mode] Gemini HTTP status: ${resp.status}`);
 
   if (!resp.ok) {
     const errText = await resp.text().catch(() => "");
     console.error(`[AI Mode] Gemini API error (${resp.status}):`, errText.slice(0, 500));
-    throw new Error(`Gemini API error (${resp.status}): ${errText.slice(0, 300)}`);
+    throw new Error(
+      `Gemini API returned HTTP ${resp.status}: ${errText.slice(0, 300)}`,
+    );
   }
 
-  const data = (await resp.json()) as GeminiResponse;
+  const data = (await resp.json()) as GeminiRestResponse;
 
   if (data.error) {
-    console.error("[AI Mode] Gemini API returned error:", data.error.message ?? "Unknown");
-    throw new Error(`Gemini API error: ${data.error.message ?? "Unknown"}`);
+    console.error(
+      "[AI Mode] Gemini API returned error field:",
+      data.error.message ?? "Unknown",
+      data.error.status ?? "",
+    );
+    throw new Error(
+      `Gemini API error: ${data.error.message ?? "Unknown"}${data.error.status ? ` (status: ${data.error.status})` : ""}`,
+    );
   }
 
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  const finishReason = data.candidates?.[0]?.finishReason;
+
   if (!text) {
-    console.error("[AI Mode] Gemini returned empty response");
-    throw new Error("Gemini returned an empty response.");
+    console.error(
+      "[AI Mode] Gemini returned empty response. finishReason:",
+      finishReason ?? "unknown",
+    );
+    throw new Error(
+      `Gemini returned an empty response (finishReason: ${finishReason ?? "unknown"})`,
+    );
   }
 
-  console.log(`[AI Mode] Gemini response received (${text.length} chars)`);
+  console.log(`[AI Mode] Gemini response received (${text.length} chars), finishReason: ${finishReason ?? "N/A"}`);
   return text;
 }
 
@@ -247,7 +301,10 @@ export async function processWithGemini(
     ? `${contextPrefix}\n\nUser message: ${userMessage}`
     : userMessage;
 
+  console.log("[AI Mode] Building system prompt with database context...");
   const systemPrompt = buildSystemPrompt();
+  console.log(`[AI Mode] System prompt length: ${systemPrompt.length} chars`);
+
   const raw = await callGemini(systemPrompt, fullMessage, conversationHistory);
 
   // Parse the JSON response
@@ -264,23 +321,28 @@ export async function processWithGemini(
     if (jsonMatch) {
       try {
         parsed = JSON.parse(jsonMatch[0]) as GeminiAIResponse;
-      } catch {
-        console.error("[AI Mode] Failed to parse Gemini JSON response");
-        throw new Error("Gemini returned an invalid response that could not be parsed.");
+      } catch (parseErr) {
+        console.error("[AI Mode] Failed to parse Gemini JSON response:", parseErr instanceof Error ? parseErr.message : String(parseErr));
+        console.error("[AI Mode] Raw response (first 500 chars):", cleaned.slice(0, 500));
+        throw new Error("Gemini returned an invalid response that could not be parsed as JSON.");
       }
     } else {
       console.error("[AI Mode] No JSON found in Gemini response");
-      throw new Error("Gemini returned an invalid response with no JSON.");
+      console.error("[AI Mode] Raw response (first 500 chars):", cleaned.slice(0, 500));
+      throw new Error("Gemini returned an invalid response with no JSON content.");
     }
   }
 
   // Validate structure
   if (typeof parsed.explanation !== "string" || !parsed.explanation) {
-    throw new Error("Gemini response missing explanation field.");
+    console.error("[AI Mode] Gemini response missing explanation field");
+    throw new Error("Gemini response missing required 'explanation' field.");
   }
   if (!Array.isArray(parsed.selectedGrades)) {
     parsed.selectedGrades = [];
   }
+
+  console.log(`[AI Mode] Gemini response parsed successfully. isRecommendation: ${parsed.isRecommendation}, selectedGrades: ${parsed.selectedGrades.length}`);
 
   return parsed;
 }

@@ -182,15 +182,30 @@ export async function processAIRecommendation(input: unknown): Promise<AIRecomme
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : "An unexpected error occurred.";
     console.error("[AI Mode] Gemini processing error:", errorMsg);
+
+    // Determine error type for structured response
+    let errorCode = "gemini_request_failed";
+    if (errorMsg.includes("GEMINI_API_KEY") || errorMsg.includes("not configured")) {
+      errorCode = "gemini_not_configured";
+    } else if (errorMsg.includes("Network error")) {
+      errorCode = "gemini_network_error";
+    } else if (errorMsg.includes("invalid response") || errorMsg.includes("could not be parsed") || errorMsg.includes("missing required")) {
+      errorCode = "gemini_parse_error";
+    } else if (errorMsg.includes("HTTP 4")) {
+      errorCode = "gemini_client_error";
+    } else if (errorMsg.includes("HTTP 5")) {
+      errorCode = "gemini_server_error";
+    }
+
     return {
       success: false,
-      message: `I encountered an error while processing your request: ${errorMsg}. Please try rephrasing your question or try again later.`,
+      message: `AI service error: ${errorMsg}`,
       isRecommendation: false,
       isGeneralQuestion: false,
       mentionedGradeUnavailable: null,
       selectedGrades: [],
       geminiConfigured: true,
-      error: errorMsg,
+      error: errorCode,
     };
   }
 
