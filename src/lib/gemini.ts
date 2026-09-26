@@ -19,8 +19,12 @@ import { MATERIAL_DATA, getAllGradeNames } from "./ai-recommendation";
  * Config
  * ------------------------------------------------------------------ */
 
-const GEMINI_MODEL = "gemini-3.8-flash";
+const PRIMARY_MODEL = "gemini-3.8-flash";
+const FALLBACK_MODEL = "gemini-3.7-flash";
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+
+const RETRYABLE_STATUS = new Set([429, 503]);
+const RETRY_DELAYS_MS = [1000, 2000, 4000];
 
 function getApiKey(): string | null {
   const env = (typeof process !== "undefined" ? process.env : {}) as Record<string, string | undefined>;
@@ -77,22 +81,19 @@ interface GeminiRestResponse {
 }
 
 /* ------------------------------------------------------------------ *
- * Low-level Gemini call
+ * Low-level Gemini call (single attempt, no retry)
  * ------------------------------------------------------------------ */
 
-async function callGemini(
+async function callGeminiOnce(
+  model: string,
   systemPrompt: string,
   userMessage: string,
-  conversationHistory: GeminiMessage[] = [],
+  conversationHistory: GeminiMessage[],
 ): Promise<string> {
   const apiKey = getApiKey();
   if (!apiKey) {
     throw new Error("GEMINI_API_KEY is not configured.");
   }
-
-  console.log("[AI Mode] Gemini request started");
-  console.log(`[AI Mode] Model: ${GEMINI_MODEL}`);
-  console.log(`[AI Mode] History messages: ${conversationHistory.length}`);
 
   // Build contents in Gemini REST format: each item must have { role, parts: [{ text }] }
   const contents: GeminiRestContent[] = [];
@@ -123,9 +124,7 @@ async function callGemini(
     },
   };
 
-  const url = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
-
-  console.log(`[AI Mode] Sending POST to Gemini API...`);
+  const url = `${GEMINI_API_BASE}/${model}:generateContent?key=${apiKey}`;
 
   let resp: Response;
   try {
@@ -135,33 +134,23 @@ async function callGemini(
       body: JSON.stringify(body),
     });
   } catch (fetchErr) {
-    console.error(
-      "[AI Mode] Gemini fetch failed:",
-      fetchErr instanceof Error ? fetchErr.message : String(fetchErr),
-    );
     throw new Error(
       `Network error reaching Gemini API: ${fetchErr instanceof Error ? fetchErr.message : "unknown"}`,
     );
   }
 
-  console.log(`[AI Mode] Gemini HTTP status: ${resp.status}`);
-
   if (!resp.ok) {
     const errText = await resp.text().catch(() => "");
-    console.error(`[AI Mode] Gemini API error (${resp.status}):`, errText.slice(0, 500));
-    throw new Error(
+    const err = new Error(
       `Gemini API returned HTTP ${resp.status}: ${errText.slice(0, 300)}`,
-    );
+    ) as Error & { status?: number };
+    err.status = resp.status;
+    throw err;
   }
 
   const data = (await resp.json()) as GeminiRestResponse;
 
   if (data.error) {
-    console.error(
-      "[AI Mode] Gemini API returned error field:",
-      data.error.message ?? "Unknown",
-      data.error.status ?? "",
-    );
     throw new Error(
       `Gemini API error: ${data.error.message ?? "Unknown"}${data.error.status ? ` (status: ${data.error.status})` : ""}`,
     );
@@ -171,17 +160,75 @@ async function callGemini(
   const finishReason = data.candidates?.[0]?.finishReason;
 
   if (!text) {
-    console.error(
-      "[AI Mode] Gemini returned empty response. finishReason:",
-      finishReason ?? "unknown",
-    );
     throw new Error(
       `Gemini returned an empty response (finishReason: ${finishReason ?? "unknown"})`,
     );
   }
 
-  console.log(`[AI Mode] Gemini response received (${text.length} chars), finishReason: ${finishReason ?? "N/A"}`);
   return text;
+}
+
+/* ------------------------------------------------------------------ *
+ * Gemini call with retry + model fallback
+ * ------------------------------------------------------------------ */
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function callGeminiWithRetry(
+  systemPrompt: string,
+  userMessage: string,
+  conversationHistory: GeminiMessage[],
+): Promise<string> {
+  const models = [PRIMARY_MODEL, FALLBACK_MODEL];
+
+  let lastError: Error | null = null;
+
+  for (let m = 0; m < models.length; m++) {
+    const model = models[m];
+    const isLastModel = m === models.length - 1;
+
+    console.log(`[AI Mode] Using model: ${model} (attempt ${m + 1}/${models.length})`);
+
+    for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+      try {
+        if (attempt > 0) {
+          const delay = RETRY_DELAYS_MS[attempt - 1];
+          console.log(`[AI Mode] Retrying ${model} in ${delay}ms (attempt ${attempt + 1})...`);
+          await sleep(delay);
+        }
+
+        const text = await callGeminiOnce(model, systemPrompt, userMessage, conversationHistory);
+        console.log(`[AI Mode] Gemini response received (${text.length} chars) from ${model}`);
+        return text;
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        const status = (err as Error & { status?: number }).status;
+
+        const retryable = status != null && RETRYABLE_STATUS.has(status);
+        const moreRetries = attempt < RETRY_DELAYS_MS.length;
+
+        if (retryable && moreRetries) {
+          console.warn(`[AI Mode] ${model} returned HTTP ${status} — will retry (${moreRetries ? "yes" : "no"})`);
+          continue;
+        }
+
+        if (retryable && !moreRetries && !isLastModel) {
+          console.warn(`[AI Mode] ${model} exhausted retries (HTTP ${status}) — falling back to ${FALLBACK_MODEL}`);
+          break;
+        }
+
+        // Non-retryable error, or last model exhausted — throw
+        if (!retryable) {
+          console.error(`[AI Mode] ${model} failed (non-retryable): ${lastError.message}`);
+        }
+        throw lastError;
+      }
+    }
+  }
+
+  throw lastError ?? new Error("Gemini API failed after all retries and fallbacks.");
 }
 
 /* ------------------------------------------------------------------ *
@@ -304,8 +351,9 @@ export async function processWithGemini(
   console.log("[AI Mode] Building system prompt with database context...");
   const systemPrompt = buildSystemPrompt();
   console.log(`[AI Mode] System prompt length: ${systemPrompt.length} chars`);
+  console.log(`[AI Mode] History messages: ${conversationHistory.length}`);
 
-  const raw = await callGemini(systemPrompt, fullMessage, conversationHistory);
+  const raw = await callGeminiWithRetry(systemPrompt, fullMessage, conversationHistory);
 
   // Parse the JSON response
   let cleaned = raw.trim();
