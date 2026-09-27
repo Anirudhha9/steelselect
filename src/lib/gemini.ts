@@ -1,14 +1,7 @@
 /**
  * Gemini API integration — server-side only.
  *
- * Gemini performs the COMPLETE AI reasoning for AI Mode:
- *   - Understands the user's natural-language requirements
- *   - Compares against the provided database material records
- *   - Selects suitable grades ONLY from those records
- *   - Explains the recommendation and trade-offs
- *
- * The backend enforces the database boundary: Gemini can only recommend
- * grades that exist in the database. The caller validates Gemini's output.
+ * Gemini is the FALLBACK AI provider for AI Mode (Grok is primary).
  *
  * GEMINI_API_KEY is read from the environment and NEVER exposed to the client.
  */
@@ -19,12 +12,13 @@ import { MATERIAL_DATA, getAllGradeNames } from "./ai-recommendation";
  * Config
  * ------------------------------------------------------------------ */
 
-const PRIMARY_MODEL = "gemini-3.8-flash";
-const FALLBACK_MODEL = "gemini-3.7-flash";
+const GEMINI_MODEL = "gemini-3.8-flash";
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
-const RETRYABLE_STATUS = new Set([429, 503]);
-const RETRY_DELAYS_MS = [1000, 2000, 4000];
+/** Only 503/502/500 are retried. 429 is quota exhaustion — stop immediately. */
+const RETRYABLE_STATUS = new Set([500, 502, 503]);
+const MAX_RETRIES = 2;
+const RETRY_DELAYS_MS = [1000, 2000];
 
 function getApiKey(): string | null {
   const env = (typeof process !== "undefined" ? process.env : {}) as Record<string, string | undefined>;
@@ -39,10 +33,6 @@ export function isGeminiConfigured(): boolean {
  * Types
  * ------------------------------------------------------------------ */
 
-/**
- * Internal message format used between functions in this file.
- * Converted to Gemini's REST format before sending.
- */
 export interface GeminiMessage {
   role: "user" | "model";
   content: string;
@@ -62,7 +52,7 @@ export interface GeminiAIResponse {
 }
 
 /* ------------------------------------------------------------------ *
- * Gemini REST API types (the wire format)
+ * Gemini REST API types
  * ------------------------------------------------------------------ */
 
 interface GeminiRestContent {
@@ -81,21 +71,35 @@ interface GeminiRestResponse {
 }
 
 /* ------------------------------------------------------------------ *
- * Low-level Gemini call (single attempt, no retry)
+ * Error with HTTP status attached
+ * ------------------------------------------------------------------ */
+
+export interface AIProviderError extends Error {
+  status?: number;
+  code?: string;
+}
+
+function makeError(message: string, status?: number, code?: string): AIProviderError {
+  const err = new Error(message) as AIProviderError;
+  err.status = status;
+  err.code = code;
+  return err;
+}
+
+/* ------------------------------------------------------------------ *
+ * Low-level Gemini call (single attempt)
  * ------------------------------------------------------------------ */
 
 async function callGeminiOnce(
-  model: string,
   systemPrompt: string,
   userMessage: string,
   conversationHistory: GeminiMessage[],
 ): Promise<string> {
   const apiKey = getApiKey();
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not configured.");
+    throw makeError("GEMINI_API_KEY is not configured.", undefined, "GEMINI_NOT_CONFIGURED");
   }
 
-  // Build contents in Gemini REST format: each item must have { role, parts: [{ text }] }
   const contents: GeminiRestContent[] = [];
 
   for (const msg of conversationHistory) {
@@ -105,7 +109,6 @@ async function callGeminiOnce(
     });
   }
 
-  // Add the current user message
   contents.push({
     role: "user",
     parts: [{ text: userMessage }],
@@ -124,7 +127,7 @@ async function callGeminiOnce(
     },
   };
 
-  const url = `${GEMINI_API_BASE}/${model}:generateContent?key=${apiKey}`;
+  const url = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
 
   let resp: Response;
   try {
@@ -134,25 +137,26 @@ async function callGeminiOnce(
       body: JSON.stringify(body),
     });
   } catch (fetchErr) {
-    throw new Error(
+    throw makeError(
       `Network error reaching Gemini API: ${fetchErr instanceof Error ? fetchErr.message : "unknown"}`,
+      0,
+      "GEMINI_NETWORK_ERROR",
     );
   }
 
   if (!resp.ok) {
     const errText = await resp.text().catch(() => "");
-    const err = new Error(
-      `Gemini API returned HTTP ${resp.status}: ${errText.slice(0, 300)}`,
-    ) as Error & { status?: number };
-    err.status = resp.status;
-    throw err;
+    const code = resp.status === 429 ? "GEMINI_QUOTA_EXCEEDED" : "GEMINI_TEMPORARY_ERROR";
+    throw makeError(`Gemini API returned HTTP ${resp.status}: ${errText.slice(0, 200)}`, resp.status, code);
   }
 
   const data = (await resp.json()) as GeminiRestResponse;
 
   if (data.error) {
-    throw new Error(
-      `Gemini API error: ${data.error.message ?? "Unknown"}${data.error.status ? ` (status: ${data.error.status})` : ""}`,
+    throw makeError(
+      `Gemini API error: ${data.error.message ?? "Unknown"}`,
+      undefined,
+      "GEMINI_TEMPORARY_ERROR",
     );
   }
 
@@ -160,8 +164,10 @@ async function callGeminiOnce(
   const finishReason = data.candidates?.[0]?.finishReason;
 
   if (!text) {
-    throw new Error(
+    throw makeError(
       `Gemini returned an empty response (finishReason: ${finishReason ?? "unknown"})`,
+      undefined,
+      "GEMINI_PARSE_ERROR",
     );
   }
 
@@ -169,7 +175,7 @@ async function callGeminiOnce(
 }
 
 /* ------------------------------------------------------------------ *
- * Gemini call with retry + model fallback
+ * Gemini call with retry — 503/502/500 only, max 2 retries, 429 stops
  * ------------------------------------------------------------------ */
 
 function sleep(ms: number): Promise<void> {
@@ -181,94 +187,72 @@ async function callGeminiWithRetry(
   userMessage: string,
   conversationHistory: GeminiMessage[],
 ): Promise<string> {
-  const models = [PRIMARY_MODEL, FALLBACK_MODEL];
+  let lastError: AIProviderError | null = null;
 
-  let lastError: Error | null = null;
+  // 1 initial request + up to 2 retries = max 3 total requests
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      if (attempt > 0) {
+        const delay = RETRY_DELAYS_MS[attempt - 1];
+        console.log(`[AI Mode] Gemini retry ${attempt}/${MAX_RETRIES} in ${delay}ms...`);
+        await sleep(delay);
+      }
 
-  for (let m = 0; m < models.length; m++) {
-    const model = models[m];
-    const isLastModel = m === models.length - 1;
+      console.log(`[AI Mode] Gemini request attempt ${attempt + 1}/${MAX_RETRIES + 1}`);
+      const text = await callGeminiOnce(systemPrompt, userMessage, conversationHistory);
+      console.log(`[AI Mode] Gemini response received (${text.length} chars)`);
+      return text;
+    } catch (err) {
+      lastError = err instanceof Error ? (err as AIProviderError) : makeError(String(err));
+      const status = lastError.status;
 
-    console.log(`[AI Mode] Using model: ${model} (attempt ${m + 1}/${models.length})`);
-
-    for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
-      try {
-        if (attempt > 0) {
-          const delay = RETRY_DELAYS_MS[attempt - 1];
-          console.log(`[AI Mode] Retrying ${model} in ${delay}ms (attempt ${attempt + 1})...`);
-          await sleep(delay);
-        }
-
-        const text = await callGeminiOnce(model, systemPrompt, userMessage, conversationHistory);
-        console.log(`[AI Mode] Gemini response received (${text.length} chars) from ${model}`);
-        return text;
-      } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err));
-        const status = (err as Error & { status?: number }).status;
-
-        const retryable = status != null && RETRYABLE_STATUS.has(status);
-        const moreRetries = attempt < RETRY_DELAYS_MS.length;
-
-        if (retryable && moreRetries) {
-          console.warn(`[AI Mode] ${model} returned HTTP ${status} — will retry (${moreRetries ? "yes" : "no"})`);
-          continue;
-        }
-
-        if (retryable && !moreRetries && !isLastModel) {
-          console.warn(`[AI Mode] ${model} exhausted retries (HTTP ${status}) — falling back to ${FALLBACK_MODEL}`);
-          break;
-        }
-
-        // Non-retryable error, or last model exhausted — throw
-        if (!retryable) {
-          console.error(`[AI Mode] ${model} failed (non-retryable): ${lastError.message}`);
-        }
+      // 429 = quota exhausted — STOP immediately, no retry, no fallback model
+      if (status === 429) {
+        console.error(`[AI Mode] Gemini HTTP 429 (quota exceeded) — stopping immediately`);
         throw lastError;
       }
+
+      // Non-retryable error — stop immediately
+      const retryable = status != null && RETRYABLE_STATUS.has(status);
+      if (!retryable) {
+        console.error(`[AI Mode] Gemini non-retryable error (HTTP ${status}): ${lastError.message}`);
+        throw lastError;
+      }
+
+      // Retryable (500/502/503) — retry if we haven't exhausted
+      if (attempt < MAX_RETRIES) {
+        console.warn(`[AI Mode] Gemini HTTP ${status} — will retry`);
+        continue;
+      }
+
+      console.error(`[AI Mode] Gemini exhausted ${MAX_RETRIES} retries (HTTP ${status})`);
+      throw lastError;
     }
   }
 
-  throw lastError ?? new Error("Gemini API failed after all retries and fallbacks.");
+  throw lastError ?? makeError("Gemini API failed after all retries.");
 }
 
 /* ------------------------------------------------------------------ *
- * Database material data formatting
+ * Database material data formatting (compact — only essential properties)
  * ------------------------------------------------------------------ */
 
 function formatMaterialRecord(g: (typeof MATERIAL_DATA)[number]): string {
   return [
-    `{`,
-    `  "grade": "${g.grade}",`,
-    `  "name": "${g.name}",`,
-    `  "type": "${g.type}",`,
-    `  "standard": "${g.standard}",`,
-    `  "uts": ${g.uts},`,
-    `  "yieldStrength": ${g.yieldStrength},`,
-    `  "hardness": ${g.hardness},`,
-    `  "elongation": ${g.elongation},`,
-    `  "chromium": ${g.chromium},`,
-    `  "molybdenum": ${g.molybdenum},`,
-    `  "nitrogen": ${g.nitrogen},`,
-    `  "pren": ${g.pren},`,
-    `  "prenIndex": "${g.prenIndex}",`,
-    `  "minServiceTemp": ${g.minServiceTemp},`,
-    `  "maxServiceTemp": ${g.maxServiceTemp},`,
-    `  "weldability": ${g.weldability},`,
-    `  "formability": ${g.formability},`,
-    `  "cost": ${g.cost},`,
-    `  "treatment": "${g.treatment}",`,
-    `  "description": "${g.description || "N/A"}"`,
-    `}`,
-  ].join("\n");
+    `{"grade":"${g.grade}","type":"${g.type}","standard":"${g.standard}",`,
+    `"uts":${g.uts},"ys":${g.yieldStrength},"hardness":${g.hardness},"elongation":${g.elongation},`,
+    `"cr":${g.chromium},"mo":${g.molybdenum},"n":${g.nitrogen},"pren":${g.pren},`,
+    `"minTemp":${g.minServiceTemp},"maxTemp":${g.maxServiceTemp},`,
+    `"weldability":${g.weldability},"formability":${g.formability},"cost":${g.cost}}`,
+  ].join("");
 }
 
 function buildMaterialDatabaseContext(): string {
-  const records = MATERIAL_DATA.map(formatMaterialRecord).join(",\n");
-  return `[\n${records}\n]`;
+  return MATERIAL_DATA.map(formatMaterialRecord).join(",");
 }
 
 /* ------------------------------------------------------------------ *
- * System prompt — Gemini does ALL reasoning
+ * System prompt — compact, only essential properties
  * ------------------------------------------------------------------ */
 
 export function buildSystemPrompt(): string {
@@ -277,56 +261,51 @@ export function buildSystemPrompt(): string {
 
   return `You are an expert materials engineering assistant for stainless steel selection. You help non-technical users find the right stainless steel grade.
 
-You have access to a CLOSED DATABASE of stainless steel grades with their material properties. This is the ONLY set of grades you can recommend.
+You have a CLOSED DATABASE of stainless steel grades. This is the ONLY set of grades you can recommend.
 
-DATABASE (JSON array of material property records):
-${dbJson}
+DATABASE (JSON array):
+[${dbJson}
 
-AVAILABLE GRADE NAMES: ${gradeNames}
+]
 
-YOUR TASK:
-1. Understand the user's natural-language requirements (they may not know technical terms).
-2. Compare the user's requirements against the material properties in the database above.
-3. Select the 1-5 most suitable grades from the database. You may ONLY select grades that exist in the database.
-4. Explain why each grade fits, using ONLY the actual property values from the database.
-5. Explain important trade-offs between the recommended grades.
+GRADES: ${gradeNames}
 
-CRITICAL RULES:
-- You may ONLY recommend grades that exist in the database above. NEVER invent or suggest a grade not in the database.
-- NEVER invent, estimate, or hallucinate any material property value. Every number you mention must come from the database.
-- If a property is missing or "N/A", say it is unavailable — do not guess.
-- If the user asks about a specific grade not in the database, set "mentionedGradeUnavailable" to that grade name and explain it is not available.
-- If no grade in the database satisfies the user's hard requirements, say so clearly. Do not force a recommendation.
-- Use simple, non-technical language. Explain technical terms (UTS, PREN, yield strength, etc.) when first used.
-- PREN = Pitting Resistance Equivalent Number (Cr + 3.3*Mo + 16*N). Higher = better corrosion resistance.
-- Cost score: higher = more affordable. Lower = more expensive.
-- Weldability/Formability scores: higher = better.
+Field meanings:
+- uts: Ultimate Tensile Strength (MPa)
+- ys: Yield Strength (MPa)
+- hardness: Brinell Hardness (HB)
+- elongation: Elongation % (higher = more ductile/tough)
+- cr: Chromium %, mo: Molybdenum %, n: Nitrogen %
+- pren: Pitting Resistance Equivalent Number (higher = better corrosion resistance)
+- minTemp/maxTemp: Service temperature range (°C)
+- weldability/formability: 0-100 (higher = better)
+- cost: 0-100 (higher = more affordable)
 
-RESPONSE FORMAT:
-You must respond with ONLY a valid JSON object (no markdown, no code fences) matching this structure:
+TASK:
+1. Understand the user's requirements from their message and any application/environment/cost context.
+2. Compare against the database properties.
+3. Select 1-5 most suitable grades. ONLY from the database above.
+4. Explain why each fits, using ONLY actual database values.
+
+RULES:
+- ONLY recommend grades in the database. NEVER invent grades or properties.
+- NEVER estimate or hallucinate any value. Every number must come from the database.
+- If a grade the user asks about is not in the database, set "mentionedGradeUnavailable" and explain.
+- If no grade meets the requirements, say so clearly.
+- Use simple language. Explain technical terms when first used.
+
+Respond with ONLY a valid JSON object (no markdown):
 {
   "isRecommendation": true/false,
   "isGeneralQuestion": true/false,
-  "mentionedGradeUnavailable": null or "grade name the user asked about that is not in the database",
-  "selectedGrades": [
-    {
-      "grade": "exact grade name from the database",
-      "reason": "why this grade fits the user's requirements"
-    }
-  ],
-  "explanation": "Your full natural-language response to the user. Include the recommended grades, their key properties (using ONLY database values), why they fit, trade-offs, and any requirements that could not be evaluated. Use plain text (no markdown headers). Use line breaks for readability."
-}
-
-GUIDELINES:
-- Set "isRecommendation" to true if you are recommending grades. Set to false for general questions or follow-ups.
-- Set "isGeneralQuestion" to true if the user is asking a general question (e.g., "What is PREN?", "Explain UTS").
-- "selectedGrades" should be empty if no suitable grade exists or if it's a general question.
-- The "explanation" is the main text the user sees. Make it clear, helpful, and grounded in database values.
-- For follow-up questions in a conversation, use the conversation context to maintain relevance.`;
+  "mentionedGradeUnavailable": null,
+  "selectedGrades": [{"grade":"exact grade name","reason":"why it fits"}],
+  "explanation": "Your full response to the user with properties, reasoning, and trade-offs."
+}`;
 }
 
 /* ------------------------------------------------------------------ *
- * Main entry — single Gemini call for complete AI reasoning
+ * Main entry — single Gemini call
  * ------------------------------------------------------------------ */
 
 export async function processWithGemini(
@@ -337,25 +316,30 @@ export async function processWithGemini(
   conversationHistory: GeminiMessage[] = [],
 ): Promise<GeminiAIResponse> {
   const contextPrefix = [
-    applicationContext ? `Application context (from UI): ${applicationContext}` : null,
-    environment ? `Environment (from UI): ${environment}` : null,
-    costPreference ? `Cost preference (from UI): ${costPreference}` : null,
+    applicationContext ? `Application: ${applicationContext}` : null,
+    environment ? `Environment: ${environment}` : null,
+    costPreference ? `Cost preference: ${costPreference}` : null,
   ]
     .filter(Boolean)
     .join("\n");
 
   const fullMessage = contextPrefix
-    ? `${contextPrefix}\n\nUser message: ${userMessage}`
+    ? `${contextPrefix}\n\nUser: ${userMessage}`
     : userMessage;
 
-  console.log("[AI Mode] Building system prompt with database context...");
-  const systemPrompt = buildSystemPrompt();
-  console.log(`[AI Mode] System prompt length: ${systemPrompt.length} chars`);
-  console.log(`[AI Mode] History messages: ${conversationHistory.length}`);
+  console.log("[AI Mode] Gemini system prompt built");
+  console.log(`[AI Mode] History: ${conversationHistory.length} messages`);
 
-  const raw = await callGeminiWithRetry(systemPrompt, fullMessage, conversationHistory);
+  const raw = await callGeminiWithRetry(buildSystemPrompt(), fullMessage, conversationHistory);
 
-  // Parse the JSON response
+  return parseAIJsonResponse(raw, "Gemini");
+}
+
+/* ------------------------------------------------------------------ *
+ * JSON parsing (shared with xai.ts)
+ * ------------------------------------------------------------------ */
+
+export function parseAIJsonResponse(raw: string, provider: string): GeminiAIResponse {
   let cleaned = raw.trim();
   if (cleaned.startsWith("```")) {
     cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
@@ -370,27 +354,23 @@ export async function processWithGemini(
       try {
         parsed = JSON.parse(jsonMatch[0]) as GeminiAIResponse;
       } catch (parseErr) {
-        console.error("[AI Mode] Failed to parse Gemini JSON response:", parseErr instanceof Error ? parseErr.message : String(parseErr));
-        console.error("[AI Mode] Raw response (first 500 chars):", cleaned.slice(0, 500));
-        throw new Error("Gemini returned an invalid response that could not be parsed as JSON.");
+        console.error(`[AI Mode] ${provider} JSON parse failed:`, parseErr instanceof Error ? parseErr.message : String(parseErr));
+        console.error(`[AI Mode] Raw (first 300):`, cleaned.slice(0, 300));
+        throw makeError(`${provider} returned invalid JSON.`, undefined, "PARSE_ERROR");
       }
     } else {
-      console.error("[AI Mode] No JSON found in Gemini response");
-      console.error("[AI Mode] Raw response (first 500 chars):", cleaned.slice(0, 500));
-      throw new Error("Gemini returned an invalid response with no JSON content.");
+      console.error(`[AI Mode] ${provider} no JSON found in response`);
+      throw makeError(`${provider} returned no JSON.`, undefined, "PARSE_ERROR");
     }
   }
 
-  // Validate structure
   if (typeof parsed.explanation !== "string" || !parsed.explanation) {
-    console.error("[AI Mode] Gemini response missing explanation field");
-    throw new Error("Gemini response missing required 'explanation' field.");
+    throw makeError(`${provider} response missing explanation.`, undefined, "PARSE_ERROR");
   }
   if (!Array.isArray(parsed.selectedGrades)) {
     parsed.selectedGrades = [];
   }
 
-  console.log(`[AI Mode] Gemini response parsed successfully. isRecommendation: ${parsed.isRecommendation}, selectedGrades: ${parsed.selectedGrades.length}`);
-
+  console.log(`[AI Mode] ${provider} parsed: isRecommendation=${parsed.isRecommendation}, grades=${parsed.selectedGrades.length}`);
   return parsed;
 }
