@@ -271,7 +271,7 @@ function buildMaterialDatabaseContext(): string {
  * System prompt — Gemini does ALL reasoning
  * ------------------------------------------------------------------ */
 
-function buildSystemPrompt(): string {
+export function buildSystemPrompt(): string {
   const dbJson = buildMaterialDatabaseContext();
   const gradeNames = getAllGradeNames().join(", ");
 

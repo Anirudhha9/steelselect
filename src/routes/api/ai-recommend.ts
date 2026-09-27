@@ -18,7 +18,8 @@ export const Route = createFileRoute("/api/ai-recommend")({
               isGeneralQuestion: false,
               mentionedGradeUnavailable: null,
               selectedGrades: [],
-              geminiConfigured: false,
+              aiConfigured: false,
+              provider: null,
               error: "invalid_json",
             },
             { status: 400 },
@@ -27,7 +28,7 @@ export const Route = createFileRoute("/api/ai-recommend")({
 
         try {
           const result = await processAIRecommendation(body);
-          const status = result.success ? 200 : result.geminiConfigured ? 422 : 503;
+          const status = result.success ? 200 : result.aiConfigured ? 422 : 503;
           return Response.json(result, { status });
         } catch (err) {
           console.error(
@@ -43,8 +44,9 @@ export const Route = createFileRoute("/api/ai-recommend")({
               isGeneralQuestion: false,
               mentionedGradeUnavailable: null,
               selectedGrades: [],
-              geminiConfigured: false,
-              error: err instanceof Error ? err.message : "unknown_error",
+              aiConfigured: false,
+              provider: null,
+              error: "unexpected_server_error",
             },
             { status: 500 },
           );

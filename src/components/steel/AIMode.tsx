@@ -153,7 +153,8 @@ export function AIMode({
         success: boolean;
         message: string;
         error?: string;
-        geminiConfigured: boolean;
+        aiConfigured: boolean;
+        provider: string | null;
       };
 
       const aiMsg: ChatMessage = {

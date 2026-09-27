@@ -5,12 +5,14 @@
  * The API route calls this function directly.
  *
  * Architecture:
- *   User message → Gemini (understands requirements, compares DB, selects grades, explains)
+ *   User message → Grok (primary) or Gemini (fallback)
+ *   → understands requirements, compares DB, selects grades, explains
  *   → Backend validates grade selections against the database
  *   → Response
  *
- * Gemini performs the complete AI reasoning. The backend enforces the
+ * The AI performs the complete reasoning. The backend enforces the
  * database boundary: only grades that exist in the database are allowed.
+ * Raw API errors are never exposed to the user.
  */
 
 import { MATERIAL_DATA, type MaterialPropertyRecord } from "./ai-recommendation";
@@ -21,6 +23,7 @@ import {
   type GeminiGradeSelection,
   type GeminiMessage,
 } from "./gemini";
+import { isXAIConfigured, processWithGrok } from "./xai";
 
 /* ------------------------------------------------------------------ *
  * Request / Response types
@@ -48,7 +51,8 @@ export interface AIRecommendResponse {
   mentionedGradeUnavailable: string | null;
   selectedGrades: AIValidatedGrade[];
   error?: string;
-  geminiConfigured: boolean;
+  aiConfigured: boolean;
+  provider: string | null;
 }
 
 /* ------------------------------------------------------------------ *
@@ -97,7 +101,7 @@ function findGradeInDatabase(gradeName: string): MaterialPropertyRecord | null {
 }
 
 /**
- * Validate Gemini's grade selections against the database.
+ * Validate AI grade selections against the database.
  * Any grade not in the database is filtered out and flagged.
  */
 function validateGradeSelections(
@@ -116,12 +120,19 @@ function validateGradeSelections(
       });
     } else {
       invalid.push(sel.grade);
-      console.warn(`[AI Mode] Gemini selected grade "${sel.grade}" which is NOT in the database — filtered out.`);
+      console.warn(`[AI Mode] AI selected grade "${sel.grade}" which is NOT in the database — filtered out.`);
     }
   }
 
   return { valid, invalid };
 }
+
+/* ------------------------------------------------------------------ *
+ * Clean error message — never expose raw API errors to the user
+ * ------------------------------------------------------------------ */
+
+const CLEAN_ERROR_MESSAGE =
+  "I'm having trouble connecting to the AI service right now. Please try again in a moment.";
 
 /* ------------------------------------------------------------------ *
  * Main processing function — called directly by the API route
@@ -142,89 +153,142 @@ export async function processAIRecommendation(input: unknown): Promise<AIRecomme
       isGeneralQuestion: false,
       mentionedGradeUnavailable: null,
       selectedGrades: [],
-      geminiConfigured: isGeminiConfigured(),
+      aiConfigured: false,
+      provider: null,
       error: "validation_error",
     };
   }
 
+  const xaiConfigured = isXAIConfigured();
   const geminiConfigured = isGeminiConfigured();
+  const aiConfigured = xaiConfigured || geminiConfigured;
+
+  console.log(`[AI Mode] XAI_API_KEY detected: ${xaiConfigured}`);
   console.log(`[AI Mode] GEMINI_API_KEY detected: ${geminiConfigured}`);
 
-  if (!geminiConfigured) {
+  if (!aiConfigured) {
     return {
       success: false,
       message:
-        "The AI service is not configured. The GEMINI_API_KEY environment variable must be set to enable AI Mode. Please contact the administrator.",
+        "The AI service is not configured. Please contact the administrator to enable AI Mode.",
       isRecommendation: false,
       isGeneralQuestion: false,
       mentionedGradeUnavailable: null,
       selectedGrades: [],
-      geminiConfigured: false,
-      error: "GEMINI_API_KEY not set",
+      aiConfigured: false,
+      provider: null,
+      error: "ai_not_configured",
     };
   }
 
-  // Convert conversation history to Gemini format
-  const geminiHistory: GeminiMessage[] = data.conversationHistory.map((m) => ({
+  // Convert conversation history to AI format (GeminiMessage is the shared internal format)
+  const aiHistory: GeminiMessage[] = data.conversationHistory.map((m) => ({
     role: m.role === "assistant" ? "model" : "user",
     content: m.content,
   }));
 
-  let geminiResult: GeminiAIResponse;
-  try {
-    geminiResult = await processWithGemini(
-      data.message,
-      data.application,
-      data.environment,
-      data.costPreference,
-      geminiHistory,
-    );
-  } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : "An unexpected error occurred.";
-    console.error("[AI Mode] Gemini processing error:", errorMsg);
+  let aiResult: GeminiAIResponse;
+  let provider: string;
 
-    // Determine error type for structured response
-    let errorCode = "gemini_request_failed";
-    if (errorMsg.includes("GEMINI_API_KEY") || errorMsg.includes("not configured")) {
-      errorCode = "gemini_not_configured";
-    } else if (errorMsg.includes("Network error")) {
-      errorCode = "gemini_network_error";
-    } else if (errorMsg.includes("invalid response") || errorMsg.includes("could not be parsed") || errorMsg.includes("missing required")) {
-      errorCode = "gemini_parse_error";
-    } else if (errorMsg.includes("HTTP 4")) {
-      errorCode = "gemini_client_error";
-    } else if (errorMsg.includes("HTTP 5")) {
-      errorCode = "gemini_server_error";
+  // Try Grok first, fall back to Gemini
+  if (xaiConfigured) {
+    provider = "grok";
+    try {
+      console.log("[AI Mode] Attempting Grok (primary)...");
+      aiResult = await processWithGrok(
+        data.message,
+        data.application,
+        data.environment,
+        data.costPreference,
+        aiHistory,
+      );
+    } catch (grokErr) {
+      console.error("[AI Mode] Grok failed:", grokErr instanceof Error ? grokErr.message : String(grokErr));
+
+      if (geminiConfigured) {
+        console.log("[AI Mode] Falling back to Gemini...");
+        provider = "gemini";
+        try {
+          aiResult = await processWithGemini(
+            data.message,
+            data.application,
+            data.environment,
+            data.costPreference,
+            aiHistory,
+          );
+        } catch (geminiErr) {
+          console.error("[AI Mode] Gemini fallback also failed:", geminiErr instanceof Error ? geminiErr.message : String(geminiErr));
+          return {
+            success: false,
+            message: CLEAN_ERROR_MESSAGE,
+            isRecommendation: false,
+            isGeneralQuestion: false,
+            mentionedGradeUnavailable: null,
+            selectedGrades: [],
+            aiConfigured: true,
+            provider: null,
+            error: "all_providers_failed",
+          };
+        }
+      } else {
+        // Only Grok was configured and it failed — show clean error
+        return {
+          success: false,
+          message: CLEAN_ERROR_MESSAGE,
+          isRecommendation: false,
+          isGeneralQuestion: false,
+          mentionedGradeUnavailable: null,
+          selectedGrades: [],
+          aiConfigured: true,
+          provider: null,
+          error: "grok_failed",
+        };
+      }
     }
-
-    return {
-      success: false,
-      message: `AI service error: ${errorMsg}`,
-      isRecommendation: false,
-      isGeneralQuestion: false,
-      mentionedGradeUnavailable: null,
-      selectedGrades: [],
-      geminiConfigured: true,
-      error: errorCode,
-    };
+  } else {
+    // Only Gemini configured
+    provider = "gemini";
+    try {
+      console.log("[AI Mode] Using Gemini (no XAI key)...");
+      aiResult = await processWithGemini(
+        data.message,
+        data.application,
+        data.environment,
+        data.costPreference,
+        aiHistory,
+      );
+    } catch (geminiErr) {
+      console.error("[AI Mode] Gemini failed:", geminiErr instanceof Error ? geminiErr.message : String(geminiErr));
+      return {
+        success: false,
+        message: CLEAN_ERROR_MESSAGE,
+        isRecommendation: false,
+        isGeneralQuestion: false,
+        mentionedGradeUnavailable: null,
+        selectedGrades: [],
+        aiConfigured: true,
+        provider: null,
+        error: "gemini_failed",
+      };
+    }
   }
 
-  // Validate Gemini's grade selections against the database
+  // Validate AI grade selections against the database
   const { valid: validatedGrades, invalid: invalidGrades } = validateGradeSelections(
-    geminiResult.selectedGrades ?? [],
+    aiResult.selectedGrades ?? [],
   );
 
   if (invalidGrades.length > 0) {
-    console.warn(`[AI Mode] ${invalidGrades.length} grade(s) from Gemini were not in the database and were removed.`);
+    console.warn(`[AI Mode] ${invalidGrades.length} grade(s) from AI were not in the database and were removed.`);
   }
 
-  // If Gemini said it's a recommendation but all grades were invalid, adjust the message
-  let finalMessage = geminiResult.explanation;
+  // If AI said it's a recommendation but all grades were invalid, adjust the message
+  let finalMessage = aiResult.explanation;
   if (
-    geminiResult.isRecommendation &&
+    aiResult.isRecommendation &&
     validatedGrades.length === 0 &&
     invalidGrades.length > 0 &&
-    !geminiResult.mentionedGradeUnavailable
+    !aiResult.mentionedGradeUnavailable
   ) {
     finalMessage =
       "I was unable to find suitable grades in the current material database for your requirements. " +
@@ -234,10 +298,11 @@ export async function processAIRecommendation(input: unknown): Promise<AIRecomme
   return {
     success: true,
     message: finalMessage,
-    isRecommendation: geminiResult.isRecommendation,
-    isGeneralQuestion: geminiResult.isGeneralQuestion,
-    mentionedGradeUnavailable: geminiResult.mentionedGradeUnavailable,
+    isRecommendation: aiResult.isRecommendation,
+    isGeneralQuestion: aiResult.isGeneralQuestion,
+    mentionedGradeUnavailable: aiResult.mentionedGradeUnavailable,
     selectedGrades: validatedGrades,
-    geminiConfigured: true,
+    aiConfigured: true,
+    provider,
   };
 }
